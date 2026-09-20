@@ -80,8 +80,8 @@ export function firstDownstreamElement(
 export function isSameRecordUpdate(facts: FlowQualityFacts, element: FlowElement): boolean {
   const node = elementNode(facts, element);
   if (!node || element.kind !== "recordUpdates") return false;
-  const texts = descendants(node).map((candidate) => candidate.text.trim());
-  if (texts.some((value) => value === "$Record" || value.startsWith("$Record."))) return true;
+  const recordReference = childText(node, "inputReference") ?? childText(node, "recordReference");
+  if (recordReference === "$Record" || recordReference?.startsWith("$Record.")) return true;
   const object = childText(node, "object");
   const hasIdFilter = descendants(node).some(
     (candidate) => candidate.name === "field" && candidate.text.trim() === "Id",

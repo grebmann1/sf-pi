@@ -65,7 +65,7 @@
       "script": "e2e:sf-flow-advanced",
       "entry": "scripts/e2e/sf-flow-advanced-sweep.ts",
       "title": "SF Flow advanced runtime sweep",
-      "summary": "Proves related records, prior values, 200-record and 200-event bulk execution, invocable Apex size/order contracts, Transform execution, Collection Filter/Sort, and Subflow inputs/outputs across autolaunched, before-save, after-save, before-delete, schedule-triggered, and platform-event runtime paths.",
+      "summary": "Proves record trigger variants, typed AND/OR/custom/formula entry criteria, immediate/related/async paths, broad logic and data elements, Apex and standard actions, prior values, bulk execution, Transform, collection processors, and Subflow contracts across non-UI core Flow families.",
       "target": "Explicit dedicated non-production org with API 67.0 or later",
       "posture": "bounded-mutation",
       "artifacts": "Metadata API validation/deployment evidence plus targeted Apex test and cleanup outcomes",

@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import {
   advancedFlowDefinitionDeactivationSource,
+  APEX_TEST_CLASSES,
+  FLOW_API_NAMES,
   parseAdvancedArgs,
   stageActiveFlowSource,
   stageScheduleSource,
@@ -52,6 +54,26 @@ describe("SF Flow advanced runtime sweep", () => {
     expect(() => stageScheduleSource("<Flow/>", "2026-09-21", "14:03:00.000Z")).toThrow(
       /expected one schedule start/i,
     );
+  });
+
+  it("tracks every broad-coverage Flow and targeted Apex test class", () => {
+    expect(FLOW_API_NAMES).toHaveLength(22);
+    expect(new Set(FLOW_API_NAMES).size).toBe(FLOW_API_NAMES.length);
+    expect(FLOW_API_NAMES).toEqual(
+      expect.arrayContaining([
+        "SfPi_Advanced_Trigger_Create_Update",
+        "SfPi_Advanced_Conditions_And",
+        "SfPi_Advanced_Conditions_Or",
+        "SfPi_Advanced_Conditions_Custom",
+        "SfPi_Advanced_Conditions_Formula",
+        "SfPi_Advanced_Related_Async",
+        "SfPi_Advanced_Data_Operations",
+        "SfPi_Advanced_Custom_Error",
+        "SfPi_Advanced_Email_Action",
+      ]),
+    );
+    expect(APEX_TEST_CLASSES).toHaveLength(17);
+    expect(new Set(APEX_TEST_CLASSES).size).toBe(APEX_TEST_CLASSES.length);
   });
 
   it("uses FlowDefinition activeVersionNumber zero for cleanup", () => {

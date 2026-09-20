@@ -79,6 +79,7 @@ const FAULTABLE_MODERATE = new Set([
 const BEFORE_SAVE_ALLOWED = new Set([
   "assignments",
   "collectionProcessors",
+  "customErrors",
   "decisions",
   "recordLookups",
   "loops",

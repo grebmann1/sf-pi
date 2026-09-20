@@ -116,6 +116,17 @@ describe("SF Flow local diagnostics", () => {
     ).toBe(false);
   });
 
+  it("allows Custom Error in a before-save record-triggered Flow", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><assignments><name>Continue</name><label>Continue</label><assignmentItems><assignToReference>$Record.Description</assignToReference><operator>Assign</operator><value><stringValue>accepted</stringValue></value></assignmentItems></assignments><customErrors><name>Reject_Record</name><label>Reject Record</label><connector><targetReference>Continue</targetReference></connector><customErrorMessages><errorMessage>Rejected by the Flow fixture.</errorMessage><isFieldError>false</isFieldError></customErrorMessages></customErrors><decisions><name>Validate</name><label>Validate</label><defaultConnector><targetReference>Continue</targetReference></defaultConnector><defaultConnectorLabel>Valid</defaultConnectorLabel><rules><name>Rejected</name><conditionLogic>and</conditionLogic><conditions><leftValueReference>$Record.Name</leftValueReference><operator>StartsWith</operator><rightValue><stringValue>Reject</stringValue></rightValue></conditions><connector><targetReference>Reject_Record</targetReference></connector><label>Rejected</label></rules></decisions><description>Before-save custom error fixture.</description><label>Before Custom Error</label><processType>AutoLaunchedFlow</processType><start><connector><targetReference>Validate</targetReference></connector><filterLogic>and</filterLogic><filters><field>Name</field><operator>IsNull</operator><value><booleanValue>false</booleanValue></value></filters><object>Account</object><recordTriggerType>CreateAndUpdate</recordTriggerType><triggerType>RecordBeforeSave</triggerType></start><status>Draft</status></Flow>`,
+      "before-save-custom-error.flow-meta.xml",
+    );
+
+    expect(
+      result.findings.some((finding) => finding.rule_id === "element-not-allowed-before-save"),
+    ).toBe(false);
+  });
+
   it("reports a Flow that has no executable path from Start", () => {
     const result = analyzeFlowSource(
       `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><description>Empty Flow fixture.</description><label>Empty Flow</label><processType>AutoLaunchedFlow</processType><start/><status>Draft</status></Flow>`,

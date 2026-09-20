@@ -76,6 +76,26 @@ describe("SF Flow preventive quality rules", () => {
     );
   });
 
+  it("does not classify a related-object update filtered by $Record.Id as a recursive same-record update", () => {
+    const findings = ids(
+      flow(
+        `<recordUpdates>
+  <name>Update_Related_Contacts</name><label>Update Related Contacts</label>
+  <filters><field>AccountId</field><operator>EqualTo</operator><value><elementReference>$Record.Id</elementReference></value></filters>
+  <inputAssignments><field>Description</field><value><stringValue>updated</stringValue></value></inputAssignments>
+  <object>Contact</object>
+</recordUpdates>`,
+        {
+          description: "Exercises a related-object update from record automation.",
+          start: `<start><filterLogic>and</filterLogic><filters><field>AccountNumber</field><operator>EqualTo</operator><value><stringValue>fixture</stringValue></value></filters><object>Account</object><recordTriggerType>Update</recordTriggerType><triggerType>RecordAfterSave</triggerType><connector><targetReference>Update_Related_Contacts</targetReference></connector></start>`,
+        },
+      ),
+    );
+
+    expect(findings).not.toContain("recursive-record-update");
+    expect(findings).not.toContain("same-record-field-updates");
+  });
+
   it("detects screen DML that can repeat through backward navigation", () => {
     const findings = ids(
       flow(

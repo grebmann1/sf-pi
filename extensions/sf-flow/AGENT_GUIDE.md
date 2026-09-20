@@ -40,6 +40,9 @@ Do not treat an unmatched action or subflow as proof that it is unavailable when
 - Keep reusable subflows small with explicit inputs and outputs; confirm that the caller supports Subflow and that the referenced version is appropriate. A child intended for a Subflow element must be a true no-trigger autolaunched Flow: omit `<triggerType>` rather than writing `<triggerType>None</triggerType>`, which can validate and deploy but fails at runtime as a triggered Flow.
 - Treat running context and data access as part of the design, especially for screen/autolaunched flows and scheduled paths.
 - Test branches, negative criteria, bulk behavior, retries, and failure paths.
+- For an `AsyncAfterCommit` scheduled path, omit label and time-offset fields and configure the record trigger to run only when the record changes to meet the entry criteria (or use an applicable Is Changed condition). Draft check-only validation can accept a definition that active deployment rejects without this transition guard.
+- Apex tests do not execute asynchronous-after-commit paths. Prove that path with a bounded real record transaction and resulting-state poll in a dedicated non-production org, then remove the evidence records.
+- A Create Records element cannot combine `assignRecordIdToReference` with `storeOutputAutomatically`; choose the exact output contract needed by downstream elements.
 
 ## Preventive quality
 

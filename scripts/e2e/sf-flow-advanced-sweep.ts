@@ -19,7 +19,7 @@ import { analyzeFlowFile } from "../../extensions/sf-flow/lib/analyzer.ts";
 
 const FIXTURE_ROOT = path.resolve("scripts/e2e/fixtures/sf-flow-advanced");
 const FORCE_APP = path.join(FIXTURE_ROOT, "force-app");
-const FLOW_API_NAMES = [
+export const FLOW_API_NAMES = [
   "SfPi_Advanced_Related_Task",
   "SfPi_Advanced_Prior_Value",
   "SfPi_Advanced_Transform_Contact",
@@ -33,11 +33,20 @@ const FLOW_API_NAMES = [
   "SfPi_Advanced_Event_Action",
   "SfPi_Advanced_Scheduled_Pipeline",
   "SfPi_Advanced_Before_Save_Collection",
+  "SfPi_Advanced_Trigger_Create_Update",
+  "SfPi_Advanced_Conditions_And",
+  "SfPi_Advanced_Conditions_Or",
+  "SfPi_Advanced_Conditions_Custom",
+  "SfPi_Advanced_Conditions_Formula",
+  "SfPi_Advanced_Related_Async",
+  "SfPi_Advanced_Data_Operations",
+  "SfPi_Advanced_Custom_Error",
+  "SfPi_Advanced_Email_Action",
 ] as const;
 const FLOW_FILES = FLOW_API_NAMES.map((name) =>
   path.join(FORCE_APP, `main/default/flows/${name}.flow-meta.xml`),
 );
-const APEX_TEST_CLASSES = [
+export const APEX_TEST_CLASSES = [
   "SfPiFlowBulkContractActionTest",
   "SfPiFlowAdvancedRuntimeTest",
   "SfPiFlowPriorRuntimeTest",
@@ -50,6 +59,11 @@ const APEX_TEST_CLASSES = [
   "SfPiFlowBeforeDeletePipelineRuntimeTest",
   "SfPiFlowPlatformEventRuntimeTest",
   "SfPiFlowBeforeSaveCollectionRuntimeTest",
+  "SfPiFlowEntryConditionRuntimeTest",
+  "SfPiFlowTriggerPathRuntimeTest",
+  "SfPiFlowDataElementRuntimeTest",
+  "SfPiFlowCustomErrorRuntimeTest",
+  "SfPiFlowStandardActionRuntimeTest",
 ] as const;
 
 interface AdvancedArgs {
@@ -248,6 +262,11 @@ interface ScheduleFixture {
   contactIds: string[];
 }
 
+interface AsyncPathFixture {
+  accountId?: string;
+  contactId?: string;
+}
+
 async function createRecord(
   session: SalesforceSession,
   object: string,
@@ -270,6 +289,22 @@ async function deleteRecord(session: SalesforceSession, object: string, id: stri
   const response = await session.request({ method: "DELETE", path: `/sobjects/${object}/${id}` });
   if (response.status >= 400 && response.status !== 404) {
     throw new Error(`Could not delete ${object} ${id}: status ${response.status}.`);
+  }
+}
+
+async function updateRecord(
+  session: SalesforceSession,
+  object: string,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const response = await session.request({
+    method: "PATCH",
+    path: `/sobjects/${object}/${id}`,
+    body,
+  });
+  if (response.status >= 400) {
+    throw new Error(`Could not update ${object} ${id}: status ${response.status}.`);
   }
 }
 
@@ -296,6 +331,49 @@ async function populateScheduleFixture(
     );
   }
   console.log("✅ schedule fixture: 2 Accounts · 4 Contacts");
+}
+
+async function exerciseAsyncPath(
+  session: SalesforceSession,
+  fixture: AsyncPathFixture,
+  timeoutSeconds = 180,
+): Promise<void> {
+  fixture.accountId = await createRecord(session, "Account", {
+    Name: "SF Pi Async Path",
+    AccountNumber: "SFPI-ADVANCED-PATHS-PENDING",
+  });
+  fixture.contactId = await createRecord(session, "Contact", {
+    AccountId: fixture.accountId,
+    LastName: "SFPI Async Path Contact",
+  });
+  await updateRecord(session, "Account", fixture.accountId, {
+    Name: "SF Pi Async Path Updated",
+    AccountNumber: "SFPI-ADVANCED-PATHS",
+  });
+
+  const contacts = await session.query<{ Description?: string }>({
+    soql: `SELECT Description FROM Contact WHERE Id = '${fixture.contactId}'`,
+    api: "rest",
+    maxRows: 1,
+  });
+  if (contacts.records[0]?.Description !== "SFPI synchronous related update") {
+    throw new Error("The immediate path did not update the related Contact.");
+  }
+
+  const deadline = Date.now() + timeoutSeconds * 1_000;
+  do {
+    const tasks = await session.query<{ Id?: string }>({
+      soql: `SELECT Id FROM Task WHERE WhatId = '${fixture.accountId}' AND Subject = 'SFPI async-after-commit evidence'`,
+      api: "rest",
+      maxRows: 2,
+    });
+    if (tasks.records.length === 1) {
+      console.log("✅ async runtime: related Contact updated · after-commit Task created");
+      return;
+    }
+    await delay(2_000);
+  } while (Date.now() < deadline);
+  throw new Error("Timed out waiting for asynchronous-after-commit Flow evidence.");
 }
 
 async function waitForScheduleEvidence(
@@ -344,6 +422,26 @@ async function waitForScheduleEvidence(
     await delay(5_000);
   } while (Date.now() < deadline);
   throw new Error("Timed out waiting for scheduled advanced Flow evidence.");
+}
+
+async function cleanupAsyncPathFixture(
+  session: SalesforceSession,
+  fixture: AsyncPathFixture | undefined,
+): Promise<void> {
+  if (!fixture) return;
+  if (fixture.accountId) {
+    const tasks = await session.query<{ Id?: string }>({
+      soql: `SELECT Id FROM Task WHERE WhatId = '${fixture.accountId}'`,
+      api: "rest",
+      maxRows: 10,
+    });
+    for (const task of tasks.records) {
+      if (task.Id) await deleteRecord(session, "Task", task.Id);
+    }
+  }
+  if (fixture.contactId) await deleteRecord(session, "Contact", fixture.contactId);
+  if (fixture.accountId) await deleteRecord(session, "Account", fixture.accountId);
+  console.log("✅ async cleanup: Task · Contact · Account");
 }
 
 async function cleanupScheduleFixture(
@@ -412,17 +510,22 @@ async function verifyInactiveAndClean(session: SalesforceSession): Promise<void>
   }
 
   const accounts = await session.query<{ Id?: string }>({
-    soql: "SELECT Id FROM Account WHERE AccountNumber IN ('SFPI-ADVANCED-BULK','SFPI-ADVANCED-PRIOR','SFPI-ADVANCED-PIPELINE','SFPI-ADVANCED-PRIOR-AFTER','SFPI-ADVANCED-DELETE','SFPI-ADVANCED-SCHEDULE','SFPI-ADVANCED-BEFORE-COLLECTION') LIMIT 1",
+    soql: "SELECT Id FROM Account WHERE AccountNumber IN ('SFPI-ADVANCED-BULK','SFPI-ADVANCED-PRIOR','SFPI-ADVANCED-PIPELINE','SFPI-ADVANCED-PRIOR-AFTER','SFPI-ADVANCED-DELETE','SFPI-ADVANCED-SCHEDULE','SFPI-ADVANCED-BEFORE-COLLECTION','SFPI-ADVANCED-CREATE-UPDATE','SFPI-ADVANCED-PATHS','SFPI-ADVANCED-CUSTOM-ERROR','SFPI-ADVANCED-DATA-OPS') LIMIT 1",
+    api: "rest",
+    maxRows: 1,
+  });
+  const opportunities = await session.query<{ Id?: string }>({
+    soql: "SELECT Id FROM Opportunity WHERE Name LIKE 'SFPI AND%' OR Name LIKE 'SFPI OR%' OR Name LIKE 'SFPI CUSTOM%' OR Name LIKE 'SFPI FORMULA%' LIMIT 1",
     api: "rest",
     maxRows: 1,
   });
   const tasks = await session.query<{ Id?: string }>({
-    soql: "SELECT Id FROM Task WHERE Subject LIKE 'SF Pi related review:%' OR Subject LIKE 'SFPI Delete %' OR Subject LIKE 'SFPI Schedule %' OR Subject LIKE 'prior=%;current=%' LIMIT 1",
+    soql: "SELECT Id FROM Task WHERE Subject LIKE 'SF Pi related review:%' OR Subject LIKE 'SFPI Delete %' OR Subject LIKE 'SFPI Schedule %' OR Subject LIKE 'prior=%;current=%' OR Subject = 'SFPI async-after-commit evidence' LIMIT 1",
     api: "rest",
     maxRows: 1,
   });
   const contacts = await session.query<{ Id?: string }>({
-    soql: "SELECT Id FROM Contact WHERE Email LIKE 'schedule-%@example.test' LIMIT 1",
+    soql: "SELECT Id FROM Contact WHERE Email LIKE 'schedule-%@example.test' OR LastName = 'SFPI Async Path Contact' LIMIT 1",
     api: "rest",
     maxRows: 1,
   });
@@ -433,6 +536,7 @@ async function verifyInactiveAndClean(session: SalesforceSession): Promise<void>
   });
   if (
     accounts.records.length ||
+    opportunities.records.length ||
     tasks.records.length ||
     contacts.records.length ||
     cron.records.length
@@ -480,6 +584,7 @@ async function main(): Promise<void> {
     `Schedule: ${scheduleStart.date} ${scheduleStart.time} · activating user timezone=${scheduleStart.timeZone}`,
   );
   const scheduleFixture: ScheduleFixture = { accountIds: [], contactIds: [] };
+  const asyncPathFixture: AsyncPathFixture = {};
   let stagedRoot: string | undefined;
   try {
     await populateScheduleFixture(session, scheduleFixture);
@@ -488,10 +593,12 @@ async function main(): Promise<void> {
       checkOnly: false,
       tests: APEX_TEST_CLASSES,
     });
+    await exerciseAsyncPath(session, asyncPathFixture);
     await waitForScheduleEvidence(session, scheduleFixture);
   } finally {
     try {
       await deactivateFixtures(session);
+      await cleanupAsyncPathFixture(session, asyncPathFixture);
       await cleanupScheduleFixture(session, scheduleFixture);
       await verifyInactiveAndClean(session);
     } finally {

@@ -175,6 +175,23 @@ export async function buildAuthoringPlan(
               row("🌊", "Subflows", grounding.subflows.length),
               row("⚠️", "Gaps", grounding.coverage.gaps.length),
             ]),
+            ...(grounding.actions.length
+              ? [
+                  section(
+                    "⚡",
+                    "Action Contracts",
+                    grounding.actions
+                      .slice(0, 5)
+                      .map((action) =>
+                        row(
+                          "⚡",
+                          action.name,
+                          `${action.type ?? "action"} · in: ${action.inputs.map((input) => `${input.name}${input.required ? "*" : ""}`).join(", ") || "none"} · out: ${action.outputs.map((output) => output.name).join(", ") || "none"}`,
+                        ),
+                      ),
+                  ),
+                ]
+              : []),
           ]
         : []),
       section("🛡️", "Preventive Quality", [

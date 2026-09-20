@@ -113,6 +113,7 @@
     "e2e:sf-lwc": "node --experimental-strip-types scripts/e2e/sf-lwc-e2e.ts",
     "e2e:sf-flow": "node --experimental-strip-types scripts/e2e/sf-flow-e2e.ts",
     "e2e:sf-flow-advanced": "node --experimental-strip-types scripts/e2e/sf-flow-advanced-sweep.ts",
+    "e2e:sf-flow-actions": "node --experimental-strip-types scripts/e2e/sf-flow-actions-sweep.ts",
     "e2e:sf-flow-families": "node --experimental-strip-types scripts/e2e/sf-flow-family-sweep.ts",
     "e2e:sf-flow-provision": "node --experimental-strip-types scripts/e2e/sf-flow-provision-test-fixture.ts",
     "instruction-surface:report": "node scripts/instruction-surface-report.mjs",

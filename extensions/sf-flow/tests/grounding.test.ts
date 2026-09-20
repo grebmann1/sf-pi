@@ -2,7 +2,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { buildAuthoringPlan } from "../lib/author.ts";
-import { groundAuthoringContext, type AuthorGroundingAdapter } from "../lib/grounding.ts";
+import {
+  collectCustomActionSummaries,
+  CUSTOM_ACTION_CATEGORIES,
+  groundAuthoringContext,
+  type AuthorGroundingAdapter,
+} from "../lib/grounding.ts";
 
 function adapter(): AuthorGroundingAdapter {
   return {
@@ -59,6 +64,41 @@ function adapter(): AuthorGroundingAdapter {
 }
 
 describe("org-grounded Flow authoring", () => {
+  it("walks hierarchical Quick Action and Email Alert action indexes", async () => {
+    const responses = new Map<string, unknown>([
+      ["/actions/custom/quickAction", { Account: "/actions/custom/quickAction/Account" }],
+      [
+        "/actions/custom/quickAction/Account",
+        {
+          actions: [
+            {
+              name: "Account.Public_Action",
+              label: "Public Action",
+              type: "QUICK_ACTION",
+              url: "/actions/custom/quickAction/Account/Public_Action",
+            },
+          ],
+        },
+      ],
+    ]);
+
+    const actions = await collectCustomActionSummaries("/actions/custom/quickAction", async (url) =>
+      responses.get(url),
+    );
+
+    expect(actions).toEqual([
+      expect.objectContaining({ name: "Account.Public_Action", type: "QUICK_ACTION" }),
+    ]);
+    expect(CUSTOM_ACTION_CATEGORIES).toEqual(
+      expect.arrayContaining([
+        "apex",
+        "externalService",
+        "quickAction",
+        "emailAlert",
+        "generateAiAgentResponse",
+      ]),
+    );
+  });
   it("grounds object fields, matching actions, and matching subflow contracts", async () => {
     const fake = adapter();
     const result = await groundAuthoringContext(
@@ -115,5 +155,18 @@ describe("org-grounded Flow authoring", () => {
       object: { api_name: "Account" },
     });
     expect(result.content[0]?.text).toContain("Grounded Org");
+    expect(result.details.digest).toMatchObject({
+      sections: expect.arrayContaining([
+        expect.objectContaining({
+          title: "Action Contracts",
+          rows: expect.arrayContaining([
+            expect.objectContaining({
+              label: "sendNotification",
+              value: expect.stringContaining("title*"),
+            }),
+          ]),
+        }),
+      ]),
+    });
   });
 });

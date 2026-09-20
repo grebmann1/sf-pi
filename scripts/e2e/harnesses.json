@@ -72,6 +72,16 @@
       "arguments": "--org <alias> [--deploy | --runtime]"
     },
     {
+      "script": "e2e:sf-flow-actions",
+      "entry": "scripts/e2e/sf-flow-actions-sweep.ts",
+      "title": "SF Flow live action sweep",
+      "summary": "Proves complex Invocable Apex, Named Credential-backed Apex, OpenAPI External Service, object-specific Quick Action, workflow Email Alert, and dynamically grounded Run Agent actions through live Flow execution.",
+      "target": "Explicit dedicated non-production org with API 67.0, outbound callout access, and at least one callable Agentforce action",
+      "posture": "bounded-mutation",
+      "artifacts": "Metadata API validation/deployment, targeted Apex tests, live action outputs, and cleanup evidence",
+      "arguments": "--org <alias> [--runtime] [--agent-action <api-name>]"
+    },
+    {
       "script": "e2e:sf-flow-families",
       "entry": "scripts/e2e/sf-flow-family-sweep.ts",
       "title": "SF Flow core-family sweep",

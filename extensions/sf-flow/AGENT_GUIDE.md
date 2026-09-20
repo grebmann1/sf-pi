@@ -44,6 +44,17 @@ Do not treat an unmatched action or subflow as proof that it is unavailable when
 - Apex tests do not execute asynchronous-after-commit paths. Prove that path with a bounded real record transaction and resulting-state poll in a dedicated non-production org, then remove the evidence records.
 - A Create Records element cannot combine `assignRecordIdToReference` with `storeOutputAutomatically`; choose the exact output contract needed by downstream elements.
 
+### Action authoring contracts
+
+- Ground actions against the target org before authoring. Standard and custom action indexes can be hierarchical; Quick Actions and Email Alerts are grouped by object, while External Services, Apex actions, and Run Agent actions expose their own categories.
+- For a caller-launched autolaunched Flow, omit `<triggerType>` entirely. An explicit `<triggerType>None</triggerType>` is unnecessary and can cause external Flow scanners to misclassify callout actions as synchronous record-trigger callouts.
+- Use `actionType=quickAction` with the object-qualified Quick Action name. For object-specific create actions, pass the parent record through the grounded `contextId` input; Draft check-only validation can miss a missing parent context that Active validation rejects.
+- Use `actionType=emailAlert` with the object-qualified Workflow Alert name and pass its grounded `SObjectRowId` input.
+- Use `actionType=externalService` with `<registration API name>.<operationId>`. Capture `responseCode` and model any generated Apex response class only when downstream logic needs the response body.
+- A Named Credential-backed Apex action should use a `callout:` endpoint and `@InvocableMethod(callout=true)`, preserve one output per request, and return per-item errors. Production integrations should prefer modern secured Named Credentials with explicit principal access; a no-authentication public probe can use an anonymous legacy Named Credential when the target org rejects a no-authentication External Credential.
+- Run Agent actions use `actionType=generateAiAgentResponse`, require `userMessage`, optionally accept `sessionId`, and return `agentResponse` plus `sessionId`. Ground and bind the org-specific action name at execution time rather than committing it to public source.
+- Complex Invocable Apex contracts can expose scalar, sObject, and collection inputs and outputs. Verify the live action describe (`type`, `required`, and `maxOccurs`) and prove bulk cardinality independently from the calling Flow.
+
 ## Preventive quality
 
 `author.plan` compiles family-applicable generation constraints from the data-first quality catalog. The post-edit hook runs the same generation profile locally. High and Moderate findings are repair guidance; no rule silently mutates source.

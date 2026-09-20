@@ -8,7 +8,14 @@ const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
 const ACTION_DETAIL_LIMIT = 5;
 const SUBFLOW_DETAIL_LIMIT = 5;
-const CUSTOM_ACTION_CATEGORIES = ["apex", "flow", "externalService", "quickAction"];
+export const CUSTOM_ACTION_CATEGORIES = [
+  "apex",
+  "flow",
+  "externalService",
+  "quickAction",
+  "emailAlert",
+  "generateAiAgentResponse",
+];
 
 export interface GroundedField {
   name: string;
@@ -189,13 +196,14 @@ function createDefaultAdapter(session: SalesforceSession): AuthorGroundingAdapte
         throw new Error(`custom actions returned HTTP ${customIndex.status}`);
       const custom = await Promise.all(
         CUSTOM_ACTION_CATEGORIES.filter((category) => customIndex.body[category]).map(
-          async (category) => {
-            const response = await session.continueRequest<{ actions?: GroundedActionSummary[] }>({
-              method: "GET",
-              path: customIndex.body[category],
-            });
-            return response.status < 400 ? (response.body.actions ?? []) : [];
-          },
+          async (category) =>
+            collectCustomActionSummaries(customIndex.body[category], async (url) => {
+              const response = await session.continueRequest<Record<string, unknown>>({
+                method: "GET",
+                path: url,
+              });
+              return response.status < 400 ? response.body : undefined;
+            }),
         ),
       );
       return [...(standard.body.actions ?? []), ...custom.flat()];
@@ -283,6 +291,34 @@ function createDefaultAdapter(session: SalesforceSession): AuthorGroundingAdapte
       };
     },
   };
+}
+
+export async function collectCustomActionSummaries(
+  url: string,
+  fetchIndex: (url: string) => Promise<unknown>,
+  depth = 0,
+): Promise<GroundedActionSummary[]> {
+  const body = await fetchIndex(url);
+  if (!body || typeof body !== "object") return [];
+  const actions = (body as { actions?: unknown }).actions;
+  if (Array.isArray(actions)) {
+    return actions.filter((action): action is GroundedActionSummary =>
+      Boolean(
+        action &&
+        typeof action === "object" &&
+        typeof (action as GroundedActionSummary).name === "string" &&
+        typeof (action as GroundedActionSummary).url === "string",
+      ),
+    );
+  }
+  if (depth >= 2) return [];
+  const childUrls = Object.values(body)
+    .filter((value): value is string => typeof value === "string" && value.startsWith("/"))
+    .slice(0, 25);
+  const nested = await Promise.all(
+    childUrls.map((childUrl) => collectCustomActionSummaries(childUrl, fetchIndex, depth + 1)),
+  );
+  return nested.flat();
 }
 
 function selectObjectFields(

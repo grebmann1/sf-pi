@@ -88,7 +88,12 @@ function shape(kind: string, label: string): string {
   if (kind === "loops") return `{{"${label}"}}`;
   if (kind === "recordLookups") return `[("${label}")]`;
   if (kind === "screens" || kind === "subflows") return `[["${label}"]]`;
-  if (kind === "actionCalls" || kind === "apexPluginCalls" || kind === "waits") {
+  if (
+    kind === "actionCalls" ||
+    kind === "apexPluginCalls" ||
+    kind === "waits" ||
+    kind === "scheduledPaths"
+  ) {
     return `(["${label}"])`;
   }
   return `["${label}"]`;
@@ -117,7 +122,10 @@ function startLabel(model: FlowModel): string {
 
 function elementLabel(element: FlowModel["elements"][number]): string {
   const title = element.label ?? element.name;
-  const verb = elementVerb(element.kind);
+  const verb =
+    element.kind === "scheduledPaths" && element.detail !== "after commit"
+      ? "SCHEDULED"
+      : elementVerb(element.kind);
   const displayTitle = element.kind === "decisions" && !/[?]$/.test(title) ? `${title}?` : title;
   return [verb, displayTitle, element.detail].filter(Boolean).join(" · ");
 }
@@ -136,6 +144,7 @@ function elementVerb(kind: string): string {
   if (kind === "waits") return "WAIT";
   if (kind === "transforms") return "TRANSFORM";
   if (kind === "collectionProcessors") return "COLLECTION";
+  if (kind === "scheduledPaths") return "ASYNC";
   return kind.replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase();
 }
 

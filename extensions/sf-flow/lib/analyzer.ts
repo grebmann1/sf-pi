@@ -13,6 +13,7 @@ import type {
   FlowResource,
   FlowSeverity,
 } from "./types.ts";
+import { findFlowConfigurationIssues, FLOW_CONFIGURATION_RULE_IDS } from "./configuration.ts";
 import { child, childText, descendants, parseFlowXml, type XmlNode } from "./xml.ts";
 import { FLOW_QUALITY_RULES, type FlowQualityProfile } from "./quality/catalog.ts";
 import { buildFlowQualityFacts } from "./quality/facts.ts";
@@ -30,6 +31,7 @@ const RULES = [
   "unreachable-element",
   "unresolved-reference",
   "record-context",
+  ...FLOW_CONFIGURATION_RULE_IDS,
   "dml-in-loop",
   "soql-in-loop",
   "missing-fault-path",
@@ -188,6 +190,10 @@ export function analyzeFlowSource(
       id: "record-context",
       reason: "specialized Flow record context is not inferred",
     });
+  for (const issue of findFlowConfigurationIssues(root)) {
+    report(issue.rule_id, "high", issue.message, issue.node, issue.element);
+  }
+  ran.push(...FLOW_CONFIGURATION_RULE_IDS);
   runLoopChecks(model, report);
   ran.push("dml-in-loop", "soql-in-loop");
   runFaultChecks(model, report);
@@ -264,7 +270,32 @@ function buildModel(root: XmlNode, file: string, source: string): FlowModel {
       line: startNode.line,
       column: startNode.column,
     });
-    connectors.push(...connectorsFor(startNode, "__start__"));
+    connectors.push(...directConnectorsFor(startNode, "__start__"));
+    for (const scheduledPath of startNode.children.filter(
+      (candidate) => candidate.name === "scheduledPaths",
+    )) {
+      const name = childText(scheduledPath, "name") ?? `scheduledPaths@${scheduledPath.line}`;
+      const asyncAfterCommit = childText(scheduledPath, "pathType") === "AsyncAfterCommit";
+      elements.push({
+        id: name,
+        name,
+        kind: "scheduledPaths",
+        label: childText(scheduledPath, "label") ?? name.replaceAll("_", " "),
+        detail: asyncAfterCommit ? "after commit" : scheduledPathDetail(scheduledPath),
+        line: scheduledPath.line,
+        column: scheduledPath.column,
+      });
+      connectors.push({
+        from: "__start__",
+        to: name,
+        kind: "scheduledPathConnector",
+        label: asyncAfterCommit ? "Async" : "Scheduled",
+        fault: false,
+        line: scheduledPath.line,
+        column: scheduledPath.column,
+      });
+      connectors.push(...directConnectorsFor(scheduledPath, name));
+    }
   }
   const legacyStart = child(root, "startElementReference");
   if (legacyStart?.text.trim()) {
@@ -360,17 +391,38 @@ function buildModel(root: XmlNode, file: string, source: string): FlowModel {
 
 function connectorsFor(node: XmlNode, from: string): FlowConnector[] {
   return descendants(node)
-    .filter((candidate) => /Connector$/.test(candidate.name) || candidate.name === "connector")
-    .map((candidate): FlowConnector | undefined => ({
-      from,
-      to: childText(candidate, "targetReference"),
-      kind: candidate.name,
-      label: semanticConnectorLabel(candidate),
-      fault: candidate.name === "faultConnector",
-      line: candidate.line,
-      column: candidate.column,
-    }))
-    .filter((connector): connector is FlowConnector => Boolean(connector));
+    .filter(isConnectorNode)
+    .map((candidate) => flowConnector(candidate, from));
+}
+
+function directConnectorsFor(node: XmlNode, from: string): FlowConnector[] {
+  return node.children.filter(isConnectorNode).map((candidate) => flowConnector(candidate, from));
+}
+
+function isConnectorNode(node: XmlNode): boolean {
+  return /Connector$/.test(node.name) || node.name === "connector";
+}
+
+function flowConnector(node: XmlNode, from: string): FlowConnector {
+  return {
+    from,
+    to: childText(node, "targetReference"),
+    kind: node.name,
+    label: semanticConnectorLabel(node),
+    fault: node.name === "faultConnector",
+    line: node.line,
+    column: node.column,
+  };
+}
+
+function scheduledPathDetail(node: XmlNode): string | undefined {
+  const offset = childText(node, "offsetNumber");
+  const unit = childText(node, "offsetUnit")?.toLowerCase();
+  const source = childText(node, "timeSource");
+  return (
+    [offset && unit ? `${offset} ${unit}` : undefined, source].filter(Boolean).join(" · ") ||
+    undefined
+  );
 }
 
 function semanticConnectorLabel(connector: XmlNode): string | undefined {

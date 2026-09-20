@@ -616,6 +616,77 @@ const nativeRules: FlowQualityRule[] = [
     engine: "core",
     profiles: allProfiles,
   }),
+  nativeRule({
+    id: "conflicting-create-output-storage",
+    label: "Conflicting Create Records Output",
+    message:
+      "Choose either an assigned record ID variable or automatic output storage for Create Records.",
+    category: "correctness",
+    default_severity: "high",
+    maturity: "stable",
+    implementation: "implemented",
+    engine: "core",
+    profiles: allProfiles,
+    authoring_constraint:
+      "Do not combine assignRecordIdToReference with storeOutputAutomatically on Create Records.",
+  }),
+  nativeRule({
+    id: "invalid-async-path-configuration",
+    label: "Invalid Asynchronous Path Configuration",
+    message: "Use only metadata fields supported by an asynchronous-after-commit path.",
+    category: "correctness",
+    default_severity: "high",
+    maturity: "stable",
+    implementation: "implemented",
+    engine: "core",
+    profiles: allProfiles,
+    supported_families: ["record-triggered"],
+    authoring_constraint:
+      "Keep AsyncAfterCommit paths free of label, time source, offset, record field, and batch-size metadata.",
+  }),
+  nativeRule({
+    id: "missing-async-path-entry-guard",
+    label: "Missing Asynchronous Path Entry Guard",
+    message:
+      "Require an update to newly meet entry criteria or use Is Changed before running asynchronously after commit.",
+    category: "reliability",
+    default_severity: "high",
+    maturity: "stable",
+    implementation: "implemented",
+    engine: "core",
+    profiles: allProfiles,
+    supported_families: ["record-triggered"],
+    authoring_constraint:
+      "Guard update-triggered AsyncAfterCommit paths with changed-to-meet criteria or an Is Changed condition.",
+  }),
+  nativeRule({
+    id: "invalid-start-filter-logic",
+    label: "Invalid Start Filter Logic",
+    message: "Use valid numbered AND/OR condition logic with balanced parentheses.",
+    category: "correctness",
+    default_severity: "high",
+    maturity: "stable",
+    implementation: "implemented",
+    engine: "core",
+    profiles: allProfiles,
+    supported_families: ["record-triggered", "schedule-triggered"],
+    authoring_constraint:
+      "Reference valid condition indexes in custom Start filter logic and use balanced AND/OR expressions.",
+  }),
+  nativeRule({
+    id: "invalid-record-filter",
+    label: "Invalid Record Filter",
+    message:
+      "Use a supported FlowRecordFilter operator and a compatible literal or reference value.",
+    category: "correctness",
+    default_severity: "high",
+    maturity: "stable",
+    implementation: "implemented",
+    engine: "core",
+    profiles: allProfiles,
+    authoring_constraint:
+      "Use supported record-filter operators and values whose literal type is compatible with the operator.",
+  }),
 ];
 
 export const FLOW_QUALITY_RULES: FlowQualityRule[] = [...nativeRules, ...scannerRules];

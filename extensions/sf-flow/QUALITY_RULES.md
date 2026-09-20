@@ -95,6 +95,11 @@ These rules are independent SF Flow lifecycle checks rather than Lightning Flow 
 - `unresolved-reference`
 - `record-context`
 - `element-not-allowed-before-save`
+- `conflicting-create-output-storage`
+- `invalid-async-path-configuration`
+- `missing-async-path-entry-guard`
+- `invalid-start-filter-logic`
+- `invalid-record-filter`
 
 ## Acknowledgement
 

@@ -97,7 +97,16 @@ describe("SF Flow quality catalog", () => {
         implementation: "independent SF Pi white-room reimplementation",
       },
     });
-    expect(result.details.implemented).toBe(29);
+    expect(result.details.implemented).toBe(34);
+    expect(result.details.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "conflicting-create-output-storage", engine: "core" }),
+        expect.objectContaining({ id: "invalid-async-path-configuration", engine: "core" }),
+        expect.objectContaining({ id: "missing-async-path-entry-guard", engine: "core" }),
+        expect.objectContaining({ id: "invalid-start-filter-logic", engine: "core" }),
+        expect.objectContaining({ id: "invalid-record-filter", engine: "core" }),
+      ]),
+    );
   });
 
   it("prohibits upstream production imports", () => {

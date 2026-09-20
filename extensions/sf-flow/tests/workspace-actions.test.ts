@@ -65,6 +65,32 @@ describe("SF Flow explicit workspace file actions", () => {
     expect(diagnosis.details).toMatchObject({ ok: true, file: relativeFile });
   });
 
+  it("exposes asynchronous paths through flow.inspect model and topology", async () => {
+    const { root, relativeFile, file } = await fixture();
+    const source = await readFile(file, "utf8");
+    await writeFile(
+      file,
+      source.replace(
+        "<start><connector><targetReference>Set_Result</targetReference></connector></start>",
+        "<start><connector><targetReference>Set_Result</targetReference></connector><doesRequireRecordChangedToMeetCriteria>true</doesRequireRecordChangedToMeetCriteria><filterLogic>and</filterLogic><filters><field>Name</field><operator>IsNull</operator><value><booleanValue>false</booleanValue></value></filters><object>Account</object><recordTriggerType>Update</recordTriggerType><scheduledPaths><name>After_Commit</name><connector><targetReference>Set_Result</targetReference></connector><pathType>AsyncAfterCommit</pathType></scheduledPaths><triggerType>RecordAfterSave</triggerType></start>",
+      ),
+    );
+
+    const inspection = await flowInspect(
+      { action: "flow.inspect", workspace: root, file: relativeFile },
+      process.cwd(),
+    );
+    const model = inspection.details.model as {
+      elements: Array<{ name: string; kind: string }>;
+    };
+    const digest = inspection.details.digest as { topology?: { mermaid: string } };
+
+    expect(model.elements).toContainEqual(
+      expect.objectContaining({ name: "After_Commit", kind: "scheduledPaths" }),
+    );
+    expect(digest.topology?.mermaid).toContain("ASYNC · After Commit · after commit");
+  });
+
   it("check-only validates a file relative to params.workspace", async () => {
     const { root, relativeFile } = await fixture();
     const run = vi.fn<FlowValidationAdapter["run"]>().mockResolvedValue({

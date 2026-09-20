@@ -64,7 +64,10 @@ The small V1 analyzer reports source-located findings for:
 - unresolved local references and invalid record context;
 - database operations inside loops;
 - missing fault paths, with Get Records treated as lower severity than mutation/action elements;
-- elements that Salesforce documents as unavailable in before-save record-triggered flows.
+- elements that Salesforce documents as unavailable in before-save record-triggered flows;
+- conflicting Create Records output-storage modes;
+- invalid asynchronous-after-commit fields, trigger timing, and update-entry guards;
+- malformed custom Start filter logic, missing condition indexes, unsupported record-filter operators, and locally provable value-type incompatibilities.
 
 Every analysis discloses skipped coverage. Broad formula, org-action, and project-wide analysis remains with Salesforce Code Analyzer.
 
@@ -93,7 +96,7 @@ Human-facing results use a normalized Flow Run Digest. Cards show:
 - Mermaid-backed Flow topology;
 - artifact paths and a next step.
 
-The Result Card stays compact. SF Flow appends bounded topology as a top-level Mermaid block on the next final assistant message, so Pi renders it natively outside the tool tile and respects the user’s Mermaid setting. The displayed architecture uses verb-first nodes, labeled decision and loop edges, solid normal paths, thick paths into durable writes, and dotted fault paths for up to 100 executable elements, below Pi’s native 128-node Mermaid parser ceiling. Pi themes borders, node text, edges, arrowheads, and edge labels by semantic class. SF Flow intentionally avoids browser-only Mermaid `classDef`, `style`, per-node colors, and Markdown bold in labels because Pi’s terminal renderer ignores them. Relevant resource details are folded into their operation node; raw resources are not separate boxes. When the displayed graph is bounded, the `.mmd` Flow Artifact contains the complete executable topology.
+The Result Card stays compact. SF Flow appends bounded topology as a top-level Mermaid block on the next final assistant message, so Pi renders it natively outside the tool tile and respects the user’s Mermaid setting. The displayed architecture uses verb-first nodes, labeled decision and loop edges, solid normal paths, thick paths into durable writes, and dotted fault paths for up to 100 executable elements, below Pi’s native 128-node Mermaid parser ceiling. Pi themes borders, node text, edges, arrowheads, and edge labels by semantic class. SF Flow intentionally avoids browser-only Mermaid `classDef`, `style`, per-node colors, and Markdown bold in labels because Pi’s terminal renderer ignores them. Relevant resource details are folded into their operation node; raw resources are not separate boxes. Asynchronous-after-commit paths appear as explicit ASYNC nodes between Start and their first element in both inspection artifacts and Mermaid topology. When the displayed graph is bounded, the `.mmd` Flow Artifact contains the complete executable topology.
 
 ## Commands
 

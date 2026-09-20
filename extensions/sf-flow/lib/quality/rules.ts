@@ -179,7 +179,8 @@ export const QUALITY_EVALUATORS: Record<string, QualityEvaluator> = {
     const start = child(facts.root, "start");
     if (!start) return;
     const hasFilter = descendants(start).some(
-      (node) => node.name === "filters" || node.name === "filterFormula",
+      (node) =>
+        node.name === "filters" || node.name === "conditions" || node.name === "filterFormula",
     );
     if (hasFilter) return;
     report({

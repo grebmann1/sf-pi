@@ -150,6 +150,21 @@ describe("SF Flow Mermaid topology", () => {
     expect(topology.source).toContain("-.->|Fault|");
   });
 
+  it("models an asynchronous-after-commit path as an explicit topology node", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><assignments><name>Immediate</name><label>Immediate</label><assignmentItems><assignToReference>status</assignToReference><operator>Assign</operator><value><stringValue>done</stringValue></value></assignmentItems></assignments><description>Async topology fixture.</description><label>Async Topology</label><processType>AutoLaunchedFlow</processType><recordCreates><name>Create_Task</name><label>Create Task</label><inputAssignments><field>Subject</field><value><stringValue>Async</stringValue></value></inputAssignments><object>Task</object></recordCreates><start><connector><targetReference>Immediate</targetReference></connector><doesRequireRecordChangedToMeetCriteria>true</doesRequireRecordChangedToMeetCriteria><filterLogic>and</filterLogic><filters><field>Name</field><operator>IsNull</operator><value><booleanValue>false</booleanValue></value></filters><object>Account</object><recordTriggerType>Update</recordTriggerType><scheduledPaths><name>After_Commit</name><connector><targetReference>Create_Task</targetReference></connector><pathType>AsyncAfterCommit</pathType></scheduledPaths><triggerType>RecordAfterSave</triggerType></start><status>Draft</status><variables><name>status</name><dataType>String</dataType><isCollection>false</isCollection><isInput>false</isInput><isOutput>false</isOutput></variables></Flow>`,
+      "async-topology.flow-meta.xml",
+    );
+    const topology = buildMermaidTopology(result.model!, 20);
+
+    expect(result.model?.elements).toContainEqual(
+      expect.objectContaining({ name: "After_Commit", kind: "scheduledPaths" }),
+    );
+    expect(topology.source).toContain("ASYNC · After Commit · after commit");
+    expect(topology.source).toContain("-->|Async| ");
+    expect(topology.source).toContain("==> ");
+  });
+
   it("describes assignments without turning resources into separate nodes", async () => {
     const result = analyzeFlowSource(
       await fixture("Record_Triggered_Example.flow-meta.xml"),

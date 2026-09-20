@@ -37,7 +37,7 @@ Do not treat an unmatched action or subflow as proof that it is unavailable when
 - Never hard-code Salesforce record IDs.
 - Collect database changes in loops and perform one database operation afterward.
 - Add fault paths to database and action elements that can fail.
-- Keep reusable subflows small with explicit inputs and outputs; confirm that the caller supports Subflow and that the referenced version is appropriate.
+- Keep reusable subflows small with explicit inputs and outputs; confirm that the caller supports Subflow and that the referenced version is appropriate. A child intended for a Subflow element must be a true no-trigger autolaunched Flow: omit `<triggerType>` rather than writing `<triggerType>None</triggerType>`, which can validate and deploy but fails at runtime as a triggered Flow.
 - Treat running context and data access as part of the design, especially for screen/autolaunched flows and scheduled paths.
 - Test branches, negative criteria, bulk behavior, retries, and failure paths.
 

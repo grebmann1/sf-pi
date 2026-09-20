@@ -62,6 +62,16 @@
       "arguments": "--org <alias> --file <flow> [--flow <FlowApiName> | --test <FlowApiName.TestName> | --run-first-discovered-test] [--async-test]"
     },
     {
+      "script": "e2e:sf-flow-advanced",
+      "entry": "scripts/e2e/sf-flow-advanced-sweep.ts",
+      "title": "SF Flow advanced runtime sweep",
+      "summary": "Proves related records, prior values, 200-record and 200-event bulk execution, invocable Apex size/order contracts, Transform execution, Collection Filter/Sort, and Subflow inputs/outputs across autolaunched, before-save, after-save, before-delete, schedule-triggered, and platform-event runtime paths.",
+      "target": "Explicit dedicated non-production org with API 67.0 or later",
+      "posture": "bounded-mutation",
+      "artifacts": "Metadata API validation/deployment evidence plus targeted Apex test and cleanup outcomes",
+      "arguments": "--org <alias> [--deploy | --runtime]"
+    },
+    {
       "script": "e2e:sf-flow-families",
       "entry": "scripts/e2e/sf-flow-family-sweep.ts",
       "title": "SF Flow core-family sweep",

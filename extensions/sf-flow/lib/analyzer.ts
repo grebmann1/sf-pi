@@ -76,7 +76,13 @@ const FAULTABLE_MODERATE = new Set([
   "recordDeletes",
   "recordUpdates",
 ]);
-const BEFORE_SAVE_ALLOWED = new Set(["assignments", "decisions", "recordLookups", "loops"]);
+const BEFORE_SAVE_ALLOWED = new Set([
+  "assignments",
+  "collectionProcessors",
+  "decisions",
+  "recordLookups",
+  "loops",
+]);
 const REFERENCE_FIELDS = new Set([
   "assignToReference",
   "collectionReference",
@@ -659,7 +665,7 @@ function runReferenceChecks(
   ].includes(model.family);
   const reported = new Set<string>();
   for (const reference of model.references) {
-    const first = reference.value.split(".")[0];
+    const first = reference.value.split(".")[0].replace(/\[\$EachItem\]$/u, "");
     const key = `${reference.line}:${reference.column}:${first}`;
     if (reported.has(key)) continue;
     if (first.startsWith("$")) {

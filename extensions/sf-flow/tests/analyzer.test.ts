@@ -52,6 +52,17 @@ describe("SF Flow local diagnostics", () => {
     );
   });
 
+  it("resolves Transform collection item references to their declared collection", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><description>Transform collection reference fixture.</description><label>Transform Collection</label><processType>AutoLaunchedFlow</processType><start><connector><targetReference>Map_Contacts</targetReference></connector></start><status>Draft</status><transforms><name>Map_Contacts</name><label>Map Contacts</label><dataType>SObject</dataType><isCollection>true</isCollection><objectType>Task</objectType><storeOutputAutomatically>true</storeOutputAutomatically><transformValues><transformValueActions><outputFieldApiName>Subject</outputFieldApiName><transformType>Map</transformType><value><elementReference>processedContacts[$EachItem].LastName</elementReference></value></transformValueActions></transformValues></transforms><variables><name>processedContacts</name><dataType>SObject</dataType><isCollection>true</isCollection><isInput>true</isInput><isOutput>false</isOutput><objectType>Contact</objectType></variables></Flow>`,
+      "transform-collection.flow-meta.xml",
+    );
+
+    expect(result.findings.some((finding) => finding.rule_id === "unresolved-reference")).toBe(
+      false,
+    );
+  });
+
   it.each([
     ["schedule-triggered", "Scheduled", "Account", "$Record.Name"],
     ["platform-event-triggered", "PlatformEvent", "Fixture_Event__e", "$Record.Message__c"],
@@ -92,6 +103,17 @@ describe("SF Flow local diagnostics", () => {
         message: expect.stringContaining("but not both"),
       }),
     );
+  });
+
+  it("allows Collection Processors in a before-save record-triggered Flow", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><assignments><name>Use_Result</name><label>Use Result</label><assignmentItems><assignToReference>$Record.Phone</assignToReference><operator>Assign</operator><value><stringValue>processed</stringValue></value></assignmentItems></assignments><collectionProcessors><name>Filter_Contacts</name><label>Filter Contacts</label><assignNextValueToReference>currentContact</assignNextValueToReference><collectionProcessorType>FilterCollectionProcessor</collectionProcessorType><collectionReference>contacts</collectionReference><conditions><leftValueReference>currentContact.Email</leftValueReference><operator>IsNull</operator><rightValue><booleanValue>false</booleanValue></rightValue></conditions><connector><targetReference>Use_Result</targetReference></connector></collectionProcessors><description>Before-save collection processor fixture.</description><label>Before Collection</label><processType>AutoLaunchedFlow</processType><start><connector><targetReference>Filter_Contacts</targetReference></connector><object>Account</object><recordTriggerType>Update</recordTriggerType><triggerType>RecordBeforeSave</triggerType></start><status>Draft</status><variables><name>contacts</name><dataType>SObject</dataType><isCollection>true</isCollection><isInput>false</isInput><isOutput>false</isOutput><objectType>Contact</objectType></variables><variables><name>currentContact</name><dataType>SObject</dataType><isCollection>false</isCollection><isInput>false</isInput><isOutput>false</isOutput><objectType>Contact</objectType></variables></Flow>`,
+      "before-save-collection.flow-meta.xml",
+    );
+
+    expect(
+      result.findings.some((finding) => finding.rule_id === "element-not-allowed-before-save"),
+    ).toBe(false);
   });
 
   it("reports a Flow that has no executable path from Start", () => {

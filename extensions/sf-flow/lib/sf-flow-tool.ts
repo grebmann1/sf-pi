@@ -12,6 +12,12 @@ import { Type } from "typebox";
 import { connectSalesforce } from "../../../lib/common/sf-conn/index.ts";
 import { resolveFlowFile } from "./analyzer.ts";
 import { flowErrorResult } from "./errors.ts";
+import {
+  activateFlowVersion,
+  deactivateFlow,
+  deployAndActivateFlow,
+  getFlowLifecycleStatus,
+} from "./lifecycle.ts";
 import { resolveFlowWorkspace } from "./project.ts";
 import { applyFlowQuickFix } from "./quick-fixes.ts";
 import { renderFlowResult } from "./render.ts";
@@ -43,6 +49,10 @@ export const SF_FLOW_ACTIONS = [
   "quality.rules",
   "fix.apply",
   "validate.check",
+  "lifecycle.status",
+  "deploy.activate",
+  "lifecycle.activate",
+  "lifecycle.deactivate",
   "test.discover",
   "test.plan",
   "test.run",
@@ -56,6 +66,18 @@ const Params = Type.Object({
   workspace: Type.Optional(Type.String({ description: "SFDX workspace path. Defaults to cwd." })),
   file: Type.Optional(
     Type.String({ description: "Workspace-contained .flow-meta.xml or .flow file." }),
+  ),
+  flow_name: Type.Optional(
+    Type.String({ description: "Exact Flow API name for lifecycle actions." }),
+  ),
+  version: Type.Optional(
+    Type.Number({ minimum: 1, description: "Exact existing Flow version to activate." }),
+  ),
+  allow_mutation: Type.Optional(
+    Type.Boolean({
+      description:
+        "Required execution-intent flag for Flow activation/deactivation; Guardrail approval remains separate.",
+    }),
   ),
   intent: Type.Optional(
     Type.String({ description: "Natural-language authoring intent for author.plan." }),
@@ -132,17 +154,19 @@ export function registerSfFlowTool(pi: ExtensionAPI): void {
     name: SF_FLOW_TOOL_NAME,
     label: "SF Flow",
     description:
-      "Lean Salesforce Flow lifecycle tool: core-five authoring plans, project scan, local diagnostics and Mermaid topology, source-bound safe quick fixes, API-native check-only validation, and targeted Flow tests.",
+      "Lean Salesforce Flow lifecycle tool: core-five authoring plans, project scan, local diagnostics and Mermaid topology, source-bound safe quick fixes, check-only validation, explicit guarded activation/deactivation, and targeted Flow tests.",
     promptSnippet:
-      "Plan, inspect, diagnose, apply source-bound safe fixes, validate, and test Salesforce Flow metadata with compact evidence and Mermaid topology.",
+      "Plan, inspect, diagnose, validate, safely activate/deactivate, and test Salesforce Flow metadata with compact evidence and resulting-state verification.",
     promptGuidelines: [
       "Use sf_flow before generic XML reasoning for Flow metadata; normal Pi file tools own source edits.",
       "Pass target_org to sf_flow author.plan when custom fields, actions, or subflow contracts must be grounded before authoring; omitted targets keep planning local.",
       "Use sf_flow diagnose.file before validate.check; check-only validation never deploys or activates a Flow.",
       "Use sf_flow fix.apply only with a current fix_id and source_version returned by diagnose.file; stale or unsupported fixes are refused.",
+      "Use sf_flow lifecycle.status for canonical REST lifecycle evidence; do not delegate FlowDefinitionView lifecycle verification to generic SOQL guessing.",
+      "Use sf_flow deploy.activate for one exact local Flow file, sf_flow lifecycle.activate for one exact existing version, and sf_flow lifecycle.deactivate for deterministic deactivation. Mutations require explicit target_org and allow_mutation=true, remain Guardrail-mediated, and refuse production or unknown orgs.",
+      "Do not invent `sf flow activate` or manually build temporary activation projects; SF CLI has no such Flow activation command.",
       "Use sf_flow targeted Flow tests only after an eligible Flow test exists in the org.",
-      "sf_flow does not deactivate Flows. After external temporary activation, never treat deploying a Draft version as deactivation; deploy FlowDefinition metadata with <activeVersionNumber>0</activeVersionNumber>, then verify FlowDefinitionView IsActive=false and ActiveVersionId=null (and no CronTrigger remains for a scheduled Flow).",
-      "Read extensions/sf-flow/AGENT_GUIDE.md for core Flow families, lifecycle ordering, and proof boundaries.",
+      "Use the installed SF Flow guide path declared in <sf_engineering_constitution> for core Flow families, lifecycle ordering, and proof boundaries.",
     ],
     parameters: Params,
     renderCall: (args, theme) => renderCall(args as SfFlowParams, theme),
@@ -165,6 +189,14 @@ export function registerSfFlowTool(pi: ExtensionAPI): void {
           return withFileMutationQueue(file.absolute, () => applyFlowQuickFix(params, ctx.cwd));
         }
 
+        if (
+          ["deploy.activate", "lifecycle.activate", "lifecycle.deactivate"].includes(
+            params.action,
+          ) &&
+          !params.target_org?.trim()
+        ) {
+          throw new Error("target_org is required for Flow lifecycle mutations");
+        }
         const session = await connectSalesforce({
           cwd: ctx.cwd,
           targetOrg: params.target_org,
@@ -179,6 +211,14 @@ export function registerSfFlowTool(pi: ExtensionAPI): void {
             return orgPreflight(session, params);
           case "validate.check":
             return validateFlowCheck(params, ctx.cwd, session, {}, signal);
+          case "lifecycle.status":
+            return getFlowLifecycleStatus(params, session);
+          case "deploy.activate":
+            return deployAndActivateFlow(params, ctx.cwd, session, {}, signal);
+          case "lifecycle.activate":
+            return activateFlowVersion(params, session, {}, signal);
+          case "lifecycle.deactivate":
+            return deactivateFlow(params, session, {}, signal);
           case "test.discover":
             return discoverFlowTests(params, session);
           case "test.plan":

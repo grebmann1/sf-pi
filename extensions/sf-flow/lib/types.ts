@@ -11,6 +11,10 @@ export type SfFlowAction =
   | "quality.rules"
   | "fix.apply"
   | "validate.check"
+  | "lifecycle.status"
+  | "deploy.activate"
+  | "lifecycle.activate"
+  | "lifecycle.deactivate"
   | "test.discover"
   | "test.plan"
   | "test.run"
@@ -34,6 +38,9 @@ export interface SfFlowParams {
   target_org?: string;
   workspace?: string;
   file?: string;
+  flow_name?: string;
+  version?: number;
+  allow_mutation?: boolean;
   intent?: string;
   flow_type?: Exclude<FlowFamily, "specialized" | "unknown">;
   object?: string;

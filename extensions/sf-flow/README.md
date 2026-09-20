@@ -2,9 +2,9 @@
 
 ## What It Does
 
-SF Flow is a lean lifecycle extension for Salesforce Flow metadata. It helps agents choose a general-purpose Flow family, inspect and diagnose local source, validate one exact Flow without saving it, run targeted Flow tests, and present graph structure as Mermaid-backed terminal diagrams.
+SF Flow is a lean lifecycle extension for Salesforce Flow metadata. It helps agents choose a general-purpose Flow family, inspect and diagnose local source, validate one exact Flow without saving it, explicitly activate or deactivate one Flow with resulting-state verification, run targeted Flow tests, and present graph structure as Mermaid-backed terminal diagrams.
 
-Normal Pi `read`, `write`, and `edit` tools own source changes. SF Flow never deploys or activates a Flow.
+Normal Pi `read`, `write`, and `edit` tools own source changes. SF Flow owns only the explicit one-Flow lifecycle operations below; it is not a general metadata deployment surface.
 
 ## Core Flow Families
 
@@ -27,6 +27,7 @@ status, org.preflight
 project.scan, flow.inspect, author.plan, diagnose.file, quality.rules
 fix.apply
 validate.check
+lifecycle.status, deploy.activate, lifecycle.activate, lifecycle.deactivate
 test.discover, test.plan, test.run, test.result, test.rerun
 ```
 
@@ -37,11 +38,12 @@ The intended loop is:
 3. Run `diagnose.file` until deterministic local findings are resolved. It returns the exact source version and any safe source-bound quick fixes.
 4. Apply only a current `fix.apply` result when API version, Auto-Layout, or unused-variable cleanup is appropriate. Business logic remains with normal Pi edits.
 5. Run `validate.check` against the intended org. This is a one-file Metadata API check-only operation and saves no metadata.
-6. Run the smallest relevant targeted Flow test when an eligible Flow test exists in the org.
+6. Use `lifecycle.status` for read-only REST state. When explicitly requested, use `deploy.activate` for one local Flow, `lifecycle.activate` for one exact existing version, or `lifecycle.deactivate` for deterministic cleanup.
+7. Run the smallest relevant targeted Flow test when an eligible Flow test exists in the org.
 
 A successful local diagnosis does not establish deployment readiness. Salesforce check-only validation is the platform evidence boundary.
 
-SF Flow does not own deployment or activation. If an external runtime proof temporarily activates a Flow, deploying a new Draft Flow version does not deactivate the existing active version. Cleanup must deploy `FlowDefinition` metadata with `<activeVersionNumber>0</activeVersionNumber>`, then verify `FlowDefinitionView.IsActive=false` and `ActiveVersionId=null`. For schedule-triggered Flows, also verify no matching `CronTrigger` remains. See [`AGENT_GUIDE.md`](./AGENT_GUIDE.md#temporary-activation-cleanup) for the exact metadata and runbook.
+Lifecycle mutations require an explicit target org and `allow_mutation=true`, remain Guardrail-mediated, and refuse production or unknown orgs. `deploy.activate` leaves the checked-in file unchanged by staging a temporary Active copy. `lifecycle.activate` never guesses latest. `lifecycle.deactivate` deploys `FlowDefinition` metadata with `<activeVersionNumber>0</activeVersionNumber>`, then verifies `FlowDefinitionView.IsActive=false` and `ActiveVersionId=null`; schedule-triggered Flows also require no matching `CronTrigger`. See [`AGENT_GUIDE.md`](./AGENT_GUIDE.md#activation-and-deactivation).
 
 ## Org-Grounded Authoring
 
@@ -112,9 +114,10 @@ The Result Card stays compact. SF Flow appends bounded topology as a top-level M
 - Automatic post-edit feedback is local-only, bounded to three actionable rounds, and stays silent for clean files.
 - `fix.apply` is limited to source-bound API-version, Auto-Layout, and unused-variable fixes and participates in Pi's file mutation queue.
 - `validate.check` stages one Flow in a temporary directory with `checkOnly=true`; it never deploys or activates.
+- `deploy.activate`, `lifecycle.activate`, and `lifecycle.deactivate` are exact, one-Flow, check-first operations with Guardrail mediation and resulting-state verification.
 - Test runs require explicit Flow API names or Flow test names and never default to all tests.
 - Complete evidence is persisted under `<globalAgentDir>/sf-pi/sf-flow/`; model-facing output stays compact.
-- No Flow execution, deployment, activation, full-screen editor, LSP, VS Code package, or AI-backed generation service is included in V1.
+- No arbitrary Flow execution, broad metadata deployment, bulk lifecycle mutation, full-screen editor, LSP, VS Code package, or AI-backed generation service is included in V1.
 
 ## Live E2E Evidence
 
@@ -127,6 +130,8 @@ The same project also contains public-safe Screen, schedule-triggered, platform-
 Advanced public-safe fixtures live under `scripts/e2e/fixtures/sf-flow-advanced/`. Run `npm run e2e:sf-flow-advanced -- --org <dedicated-non-production-alias>` for local diagnosis and combined check-only validation, `--deploy` to retain inactive Draft Flow and Apex fixtures, or `--runtime` to temporarily activate the Flow fixtures and run targeted Apex integration tests. The runtime sweep covers Create, Update, Create or Update, and Delete trigger configurations; AND, OR, custom, and formula entry criteria; every `FlowRecordFilter` operator, collectively spanning string, currency, date, picklist, boolean, and reference fields; before-save, immediate after-save, related-record, and asynchronous-after-commit paths; and 1- and 200-record transactions. Element proofs include Assignment, Decision, Loop, Custom Error, Apex and standard Send Email actions, Subflow, Transform, Collection Filter and Sort, and Get, Create, Update, and Delete Records. It also proves `$Record__Prior`, invocable Apex cardinality/order, primitive and record-collection Subflow contracts, schedule-triggered batches, and 200-event platform-event execution. Runtime paths cover no-trigger autolaunched, before-save, after-save, before-delete, schedule-triggered, and platform-event Flows. Screen runtime remains outside this headless sweep. The harness uses a real committed transaction and bounded poll for asynchronous-after-commit evidence because Apex tests do not execute that path. Cleanup runs in `finally`, deactivates every Flow with `activeVersionNumber=0`, removes bounded fixture data and scheduled jobs, and verifies zero Account, Contact, Opportunity, Task, and CronTrigger residue.
 
 Action-specific fixtures live under `scripts/e2e/fixtures/sf-flow-actions/`. Run `npm run e2e:sf-flow-actions -- --org <dedicated-non-production-alias>` for local diagnosis and combined check-only validation or add `--runtime` for targeted Apex tests plus real Flow invocations. The sweep proves a complex bulk-safe Invocable Apex contract, a Named Credential-backed Apex callout, an OpenAPI External Service callout, an object-specific Quick Action, a workflow Email Alert, and a dynamically grounded Run Agent action. The committed Run Agent template contains no org-specific action name; the harness discovers or accepts one through `--agent-action`, validates the `userMessage`/`agentResponse`/`sessionId` contract, stages it only in a temporary directory, and removes that directory afterward. Cleanup deactivates all action Flows and verifies zero fixture Account and Task residue.
+
+Run `npm run e2e:sf-flow-lifecycle -- --org <dedicated-non-production-alias>` after installing the action and advanced fixtures to exercise the production lifecycle module. The sweep proves read-only REST status, local Draft-source activation without source mutation, exact existing-version activation, deterministic deactivation, scheduled Flow activation with CronTrigger evidence, and scheduled cleanup with zero CronTrigger residue. Cleanup runs in `finally`, and production or unknown orgs are refused.
 
 The actual wide and 48-column Result Cards were rendered through the production component. Both remain bounded without embedding topology; long metadata and artifact paths use compact headers and hanging indentation. Hook tests prove the Mermaid block is appended once to the next final assistant message for Pi-native rendering.
 

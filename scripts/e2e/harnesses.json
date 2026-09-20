@@ -82,6 +82,16 @@
       "arguments": "--org <alias> [--runtime] [--agent-action <api-name>]"
     },
     {
+      "script": "e2e:sf-flow-lifecycle",
+      "entry": "scripts/e2e/sf-flow-lifecycle-sweep.ts",
+      "title": "SF Flow first-class lifecycle sweep",
+      "summary": "Proves canonical lifecycle status, local-file check/deploy/activation without source mutation, exact existing-version activation, and deterministic deactivation through the production sf_flow lifecycle implementation.",
+      "target": "Explicit dedicated non-production org with the SF Flow action fixture already installed",
+      "posture": "bounded-mutation",
+      "artifacts": "Session-scoped Flow lifecycle check-only, deployment, and resulting-state artifacts",
+      "arguments": "--org <alias>"
+    },
+    {
       "script": "e2e:sf-flow-families",
       "entry": "scripts/e2e/sf-flow-family-sweep.ts",
       "title": "SF Flow core-family sweep",

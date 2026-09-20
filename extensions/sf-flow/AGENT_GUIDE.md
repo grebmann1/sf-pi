@@ -1,6 +1,6 @@
 # SF Flow Agent Guide
 
-Use `sf_flow` for the Flow-specific lifecycle. Normal Pi file tools own `.flow-meta.xml` edits. SF Flow does not deploy, activate, or execute Flows.
+Use `sf_flow` for the Flow-specific lifecycle. Normal Pi file tools own `.flow-meta.xml` edits. SF Flow owns explicit one-Flow status, activation, and deactivation actions; it does not provide general metadata deployment or arbitrary Flow execution.
 
 ## Behavior-proof-first loop
 
@@ -12,7 +12,8 @@ Use `sf_flow` for the Flow-specific lifecycle. Normal Pi file tools own `.flow-m
 6. Use `quality.rules` when rule status, profile membership, provenance, or planned coverage matters.
 7. When diagnosis returns a safe quick fix, pass its exact `fix_id` and `source_version` to `fix.apply`. Re-diagnose after any normal business-logic edit instead of reusing a stale fix.
 8. Run `validate.check` against the intended org. It validates one exact Flow with Metadata API `checkOnly=true` and saves nothing.
-9. Use `test.plan` and `test.run` for the smallest relevant Flow or Flow test. Poll queued runs with `test.result`; use `test.rerun` only for the prior session-scoped target. Discovery is bounded and reads each selected FlowTest's Tooling API `Metadata` field in a separate single-row query. Runs submit asynchronously even when a wait is requested; SF Flow polls before fetching results. A skipped, aborted, failed, or zero-test terminal result is failed evidence, never a pass.
+9. Use `lifecycle.status` for canonical REST state. Use `deploy.activate` to stage, check, deploy, and verify one local Flow without changing its checked-in status; use `lifecycle.activate` only with an exact existing version number; use `lifecycle.deactivate` for deterministic `activeVersionNumber=0` cleanup. Never invent `sf flow activate` or delegate lifecycle verification to generic Tooling SOQL.
+10. Use `test.plan` and `test.run` for the smallest relevant Flow or Flow test. Poll queued runs with `test.result`; use `test.rerun` only for the prior session-scoped target. Discovery is bounded and reads each selected FlowTest's Tooling API `Metadata` field in a separate single-row query. Runs submit asynchronously even when a wait is requested; SF Flow polls before fetching results. A skipped, aborted, failed, or zero-test terminal result is failed evidence, never a pass.
 
 ## Core Flow Family selection
 
@@ -67,11 +68,13 @@ Automatic edit feedback is progress-gated and bounded to three actionable rounds
 
 The only mutating lifecycle action is `fix.apply`, and it owns exactly three deterministic transformations: project API version, Auto-Layout metadata, and exact unused-variable removal. Every fix is bound to a SHA-256 source version and participates in Pi's per-file mutation queue. All other repairs use normal Pi file tools.
 
-## Temporary activation cleanup
+## Activation and deactivation
 
-SF Flow has no deploy, activate, or deactivate action. When an external workflow temporarily activates a Flow for runtime proof, deploying the same Flow source with `<status>Draft</status>` creates or updates a Draft version but does **not** clear the already active version.
+`lifecycle.status` reads `FlowDefinitionView` and `FlowVersionView` through the standard REST query surface. It does not use Tooling API queries. `deploy.activate` stages an isolated Active copy of one local Flow, runs generation diagnostics and Active check-only validation, performs the guarded deployment, and verifies the resulting active version. The checked-in source is unchanged. `lifecycle.activate` requires an exact positive version and never guesses latest.
 
-Deactivate deterministically with a `FlowDefinition` component at `flowDefinitions/<FlowApiName>.flowDefinition-meta.xml`:
+Mutating lifecycle actions require explicit `target_org` plus `allow_mutation=true`, remain Guardrail-mediated, and refuse production or unknown orgs. The execution-intent flag is not approval.
+
+Deploying the same Flow source with `<status>Draft</status>` creates or updates a Draft version but does **not** clear the already active version. `lifecycle.deactivate` deterministically deploys a `FlowDefinition` component equivalent to:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -80,21 +83,22 @@ Deactivate deterministically with a `FlowDefinition` component at `flowDefinitio
 </FlowDefinition>
 ```
 
-Use this cleanup loop:
+The lifecycle action performs this cleanup loop:
 
-1. Stage the exact `FlowDefinition` metadata for every temporarily activated Flow.
-2. Run Metadata API check-only validation against the target org.
-3. Deploy the `FlowDefinition` component.
+1. Read the exact Flow definition through REST.
+2. Run Metadata API check-only validation for the one `FlowDefinition` component.
+3. Deploy the component after Guardrail approval.
 4. Query `FlowDefinitionView` and require `IsActive=false` plus `ActiveVersionId=null`.
-5. For schedule-triggered Flows, also query `CronTrigger` by Flow job name and require zero remaining rows.
-6. Verify fixture records, logs, trace flags, and other temporary runtime state are cleaned up separately.
+5. For schedule-triggered Flows, query `CronTrigger` by Flow job name and require zero remaining rows.
 
-Never report cleanup complete from a successful Draft Flow deployment alone.
+Verify fixture records, logs, trace flags, and other temporary runtime state separately. Never report cleanup complete from a successful Draft Flow deployment alone.
 
 ## Evidence boundaries
 
 - `diagnose.file` proves only the small local deterministic rule set.
 - `validate.check` proves how the selected org validates the exact staged Flow at that time; it does not save the Flow.
+- `deploy.activate` and `lifecycle.activate` prove activation only after successful check-only, deployment, and REST resulting-state verification; they do not prove business behavior.
+- `lifecycle.deactivate` proves inactive Flow definition state and scheduled-job cleanup, not cleanup of business records or external side effects.
 - `test.run` proves only the explicitly selected org Flow tests.
 - A Mermaid topology is a graph projection, not proof that Flow Builder accepts the metadata.
 - Use `code_analyzer` for broad Flow static analysis. Use `sf_apex` when Flow invokes Apex and Apex behavior needs proof. Use `sf_soql` for schema evidence not established by validation.

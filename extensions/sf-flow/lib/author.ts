@@ -194,12 +194,34 @@ export async function buildAuthoringPlan(
               : []),
           ]
         : []),
-      section("🛡️", "Preventive Quality", [
-        row("🧭", "Preventive Rules", `${generationConstraints.length} generation constraints`),
-        ...generationConstraints
-          .slice(0, 8)
-          .map((constraint) => row("•", constraint.rule_id, constraint.instruction)),
+      section("🛡️", "Generation Guardrails", [
+        row("🧭", "Applicable", generationConstraints.length),
+        row(
+          "👁️",
+          "Displayed",
+          `${generationConstraints.length} of ${generationConstraints.length}`,
+        ),
+        row("💡", "Meaning", "preventive authoring constraints, not detected violations"),
+        row("📚", "Excluded", "review and audit profiles; use quality.rules to inspect them"),
       ]),
+      ...(["high", "moderate", "low", "info"] as const)
+        .map((severity) => {
+          const applicable = generationConstraints.filter(
+            (constraint) => constraint.severity === severity,
+          );
+          return section(
+            severity === "high"
+              ? "🔴"
+              : severity === "moderate"
+                ? "🟠"
+                : severity === "low"
+                  ? "🔵"
+                  : "⚪",
+            `${severity[0]?.toUpperCase()}${severity.slice(1)} Guardrails`,
+            applicable.map((constraint) => row("•", constraint.rule_id, constraint.instruction)),
+          );
+        })
+        .filter((guardrailSection) => guardrailSection.rows.length > 0),
       section(
         "🧱",
         "Authoring Contract",
@@ -244,12 +266,7 @@ function blueprintFor(
   objectName?: string,
   eventName?: string,
 ) {
-  const common = [
-    "Use descriptive labels, API names, and descriptions.",
-    "Never hard-code Salesforce record IDs.",
-    "Collect database changes and perform them outside loops.",
-    "Add fault paths to operations that can fail.",
-  ];
+  const common = ["Use descriptive labels, API names, and descriptions."];
   const byFamily: Record<
     typeof family,
     { process_type: string; trigger_type?: string; contract: string[]; tests: string[] }

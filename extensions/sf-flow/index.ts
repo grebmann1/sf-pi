@@ -5,7 +5,8 @@
  * SF Flow is a lean Flow Lifecycle Extension. It owns core-five authoring
  * plans, local Flow inspection/diagnostics, check-only validation, targeted
  * Flow tests, compact evidence, and Mermaid topology. Normal Pi file tools own
- * source edits; deployment and activation are out of scope.
+ * source edits; explicit guarded lifecycle actions own one-Flow activation and
+ * deterministic deactivation.
  *
  * Behavior matrix:
  *
@@ -247,7 +248,7 @@ async function handleCommand(ctx: ExtensionCommandContext, action: string): Prom
       ctx,
       [
         "SF Flow is installed.",
-        "Use sf_flow for core-five Flow planning, diagnostics, check-only validation, and targeted tests.",
+        "Use sf_flow for core-five Flow planning, diagnostics, check-only validation, guarded activation/deactivation, and targeted tests.",
         "Use /sf-flow with no args to open its SF Pi Manager detail page.",
       ].join("\n"),
       "info",
@@ -268,6 +269,7 @@ async function handleCommand(ctx: ExtensionCommandContext, action: string): Prom
         "  project.scan, flow.inspect, author.plan, diagnose.file, quality.rules",
         "  fix.apply (source-bound safe fixes only)",
         "  validate.check",
+        "  lifecycle.status, deploy.activate, lifecycle.activate, lifecycle.deactivate",
         "  test.discover, test.plan, test.run, test.result, test.rerun",
       ].join("\n"),
       "info",

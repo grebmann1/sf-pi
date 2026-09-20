@@ -16,6 +16,10 @@ describe("sf-flow smoke", () => {
       "quality.rules",
       "fix.apply",
       "validate.check",
+      "lifecycle.status",
+      "deploy.activate",
+      "lifecycle.activate",
+      "lifecycle.deactivate",
       "test.discover",
       "test.plan",
       "test.run",
@@ -42,7 +46,9 @@ describe("sf-flow smoke", () => {
     const toolDefinition = pi.registerTool.mock.calls[0]?.[0];
     expect(toolDefinition?.promptGuidelines).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("activeVersionNumber>0</activeVersionNumber"),
+        expect.stringContaining("sf_flow deploy.activate"),
+        expect.stringContaining("sf_flow lifecycle.deactivate"),
+        expect.stringContaining("Do not invent `sf flow activate`"),
       ]),
     );
     expect(pi.on).toHaveBeenCalledWith("tool_result", expect.any(Function));

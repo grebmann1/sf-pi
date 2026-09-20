@@ -53,6 +53,30 @@ Automatic edit feedback is progress-gated and bounded to three actionable rounds
 
 The only mutating lifecycle action is `fix.apply`, and it owns exactly three deterministic transformations: project API version, Auto-Layout metadata, and exact unused-variable removal. Every fix is bound to a SHA-256 source version and participates in Pi's per-file mutation queue. All other repairs use normal Pi file tools.
 
+## Temporary activation cleanup
+
+SF Flow has no deploy, activate, or deactivate action. When an external workflow temporarily activates a Flow for runtime proof, deploying the same Flow source with `<status>Draft</status>` creates or updates a Draft version but does **not** clear the already active version.
+
+Deactivate deterministically with a `FlowDefinition` component at `flowDefinitions/<FlowApiName>.flowDefinition-meta.xml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<FlowDefinition xmlns="http://soap.sforce.com/2006/04/metadata">
+    <activeVersionNumber>0</activeVersionNumber>
+</FlowDefinition>
+```
+
+Use this cleanup loop:
+
+1. Stage the exact `FlowDefinition` metadata for every temporarily activated Flow.
+2. Run Metadata API check-only validation against the target org.
+3. Deploy the `FlowDefinition` component.
+4. Query `FlowDefinitionView` and require `IsActive=false` plus `ActiveVersionId=null`.
+5. For schedule-triggered Flows, also query `CronTrigger` by Flow job name and require zero remaining rows.
+6. Verify fixture records, logs, trace flags, and other temporary runtime state are cleaned up separately.
+
+Never report cleanup complete from a successful Draft Flow deployment alone.
+
 ## Evidence boundaries
 
 - `diagnose.file` proves only the small local deterministic rule set.

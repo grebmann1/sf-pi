@@ -62,6 +62,16 @@
       "arguments": "--org <alias> --file <flow> [--flow <FlowApiName> | --test <FlowApiName.TestName> | --run-first-discovered-test] [--async-test]"
     },
     {
+      "script": "e2e:sf-flow-families",
+      "entry": "scripts/e2e/sf-flow-family-sweep.ts",
+      "title": "SF Flow core-family sweep",
+      "summary": "Diagnoses and check-only validates all core Flow family fixtures, then optionally deploys them as Draft, enforces FlowDefinition deactivation cleanup, runs the non-committing after-save FlowTest twice, and verifies no jobs or records remain.",
+      "target": "Explicit non-production org with FlowTest and platform-event support",
+      "posture": "bounded-mutation",
+      "artifacts": "Session-scoped diagnostics, topology, Flow test reports, and Metadata API console evidence",
+      "arguments": "--org <alias> [--deploy]"
+    },
+    {
       "script": "e2e:sf-flow-provision",
       "entry": "scripts/e2e/sf-flow-provision-test-fixture.ts",
       "title": "SF Flow test-fixture provisioning",

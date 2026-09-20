@@ -41,6 +41,59 @@ describe("SF Flow local diagnostics", () => {
     expect(result.findings.every((finding) => finding.line > 0 && finding.column > 0)).toBe(true);
   });
 
+  it("resolves Screen field outputs as local Flow resources", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><decisions><name>Has_Input</name><label>Has Input</label><rules><name>Present</name><conditions><leftValueReference>Request_Summary</leftValueReference><operator>IsNull</operator><rightValue><booleanValue>false</booleanValue></rightValue></conditions><label>Present</label></rules></decisions><description>Screen field reference fixture.</description><label>Screen Fixture</label><processType>Flow</processType><screens><name>Collect</name><label>Collect</label><allowBack>false</allowBack><allowFinish>true</allowFinish><allowPause>false</allowPause><fields><name>Request_Summary</name><dataType>String</dataType><fieldText>Request Summary</fieldText><fieldType>InputField</fieldType><isRequired>true</isRequired></fields><showFooter>true</showFooter><showHeader>true</showHeader></screens><start><connector><targetReference>Collect</targetReference></connector></start><status>Draft</status></Flow>`,
+      "screen-fields.flow-meta.xml",
+    );
+
+    expect(result.findings.some((finding) => finding.rule_id === "unresolved-reference")).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ["schedule-triggered", "Scheduled", "Account", "$Record.Name"],
+    ["platform-event-triggered", "PlatformEvent", "Fixture_Event__e", "$Record.Message__c"],
+  ] as const)("allows $Record in %s context", (_family, triggerType, object, reference) => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><assignments><name>Capture</name><label>Capture</label><assignmentItems><assignToReference>statusMessage</assignToReference><operator>Assign</operator><value><elementReference>${reference}</elementReference></value></assignmentItems></assignments><description>Triggered record context fixture.</description><label>Triggered Fixture</label><processType>AutoLaunchedFlow</processType><start><connector><targetReference>Capture</targetReference></connector><object>${object}</object><triggerType>${triggerType}</triggerType>${triggerType === "Scheduled" ? "<schedule><frequency>Daily</frequency><startDate>2027-01-01</startDate><startTime>00:00:00.000Z</startTime></schedule>" : ""}</start><status>Draft</status><variables><name>statusMessage</name><dataType>String</dataType><isCollection>false</isCollection><isInput>false</isInput><isOutput>false</isOutput></variables></Flow>`,
+      `${triggerType}.flow-meta.xml`,
+    );
+
+    expect(result.findings.some((finding) => finding.rule_id === "record-context")).toBe(false);
+  });
+
+  it("rejects Start filters on a platform-event-triggered Flow", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><assignments><name>Capture</name><label>Capture</label><assignmentItems><assignToReference>statusMessage</assignToReference><operator>Assign</operator><value><elementReference>$Record.Message__c</elementReference></value></assignmentItems></assignments><description>Invalid event filter fixture.</description><label>Event Fixture</label><processType>AutoLaunchedFlow</processType><start><connector><targetReference>Capture</targetReference></connector><filterLogic>and</filterLogic><filters><field>Message__c</field><operator>IsNull</operator><value><booleanValue>false</booleanValue></value></filters><object>Fixture_Event__e</object><triggerType>PlatformEvent</triggerType></start><status>Draft</status><variables><name>statusMessage</name><dataType>String</dataType><isCollection>false</isCollection><isInput>false</isInput><isOutput>false</isOutput></variables></Flow>`,
+      "invalid-event-filter.flow-meta.xml",
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        rule_id: "core-flow-family",
+        severity: "high",
+        message: expect.stringContaining("does not support Start filters"),
+      }),
+    );
+  });
+
+  it("rejects a Screen that disables both Back and Finish", () => {
+    const result = analyzeFlowSource(
+      `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><description>Invalid navigation fixture.</description><label>Invalid Screen</label><processType>Flow</processType><screens><name>Collect</name><label>Collect</label><allowBack>false</allowBack><allowFinish>false</allowFinish><allowPause>false</allowPause><showFooter>true</showFooter><showHeader>true</showHeader></screens><start><connector><targetReference>Collect</targetReference></connector></start><status>Draft</status></Flow>`,
+      "invalid-screen-navigation.flow-meta.xml",
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        rule_id: "core-flow-family",
+        severity: "high",
+        message: expect.stringContaining("but not both"),
+      }),
+    );
+  });
+
   it("reports a Flow that has no executable path from Start", () => {
     const result = analyzeFlowSource(
       `<?xml version="1.0"?><Flow><apiVersion>68.0</apiVersion><description>Empty Flow fixture.</description><label>Empty Flow</label><processType>AutoLaunchedFlow</processType><start/><status>Draft</status></Flow>`,

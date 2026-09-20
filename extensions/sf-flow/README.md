@@ -41,6 +41,8 @@ The intended loop is:
 
 A successful local diagnosis does not establish deployment readiness. Salesforce check-only validation is the platform evidence boundary.
 
+SF Flow does not own deployment or activation. If an external runtime proof temporarily activates a Flow, deploying a new Draft Flow version does not deactivate the existing active version. Cleanup must deploy `FlowDefinition` metadata with `<activeVersionNumber>0</activeVersionNumber>`, then verify `FlowDefinitionView.IsActive=false` and `ActiveVersionId=null`. For schedule-triggered Flows, also verify no matching `CronTrigger` remains. See [`AGENT_GUIDE.md`](./AGENT_GUIDE.md#temporary-activation-cleanup) for the exact metadata and runbook.
+
 ## Org-Grounded Authoring
 
 `author.plan` remains local when `target_org` is omitted. With an explicit target, it performs bounded read-only grounding for:
@@ -116,6 +118,8 @@ The Result Card stays compact. SF Flow appends bounded topology as a top-level M
 The E2E harness has passed against a connected non-production org at API 67.0: org preflight, clean local diagnosis, one-file Metadata API check-only validation, FlowTest metadata discovery, queued targeted `test.run`, and polled `test.result` completion.
 
 A dedicated public-safe draft autolaunched Flow and FlowTest fixture is available under `scripts/e2e/fixtures/sf-flow/`. Provisioning always performs check-only first and requires an explicit `--deploy` flag. The fixture creates no data records and requires no activation.
+
+The same project also contains public-safe Screen, schedule-triggered, platform-event-triggered, before-delete, and after-save fixtures plus one non-committing after-save FlowTest. Run `npm run e2e:sf-flow-families -- --org <non-production-alias>` for local diagnosis and combined check-only validation. Add `--deploy` to deploy Draft fixtures, deactivate any fixture left active through `FlowDefinition.activeVersionNumber=0`, run and rerun the after-save FlowTest, and verify inactive state, scheduled-job cleanup, and zero Account/Task residue.
 
 The actual wide and 48-column Result Cards were rendered through the production component. Both remain bounded without embedding topology; long metadata and artifact paths use compact headers and hanging indentation. Hook tests prove the Mermaid block is appended once to the next final assistant message for Pi-native rendering.
 

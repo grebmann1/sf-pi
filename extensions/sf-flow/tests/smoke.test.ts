@@ -39,6 +39,12 @@ describe("sf-flow smoke", () => {
     await handlers.get("session_start")?.({} as never, {} as never);
 
     expect(pi.registerTool).toHaveBeenCalledTimes(1);
+    const toolDefinition = pi.registerTool.mock.calls[0]?.[0];
+    expect(toolDefinition?.promptGuidelines).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("activeVersionNumber>0</activeVersionNumber"),
+      ]),
+    );
     expect(pi.on).toHaveBeenCalledWith("tool_result", expect.any(Function));
     const command = pi.registerCommand.mock.calls.find(([name]) => name === "sf-flow")?.[1];
     expect(

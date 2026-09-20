@@ -141,6 +141,7 @@ export function registerSfFlowTool(pi: ExtensionAPI): void {
       "Use sf_flow diagnose.file before validate.check; check-only validation never deploys or activates a Flow.",
       "Use sf_flow fix.apply only with a current fix_id and source_version returned by diagnose.file; stale or unsupported fixes are refused.",
       "Use sf_flow targeted Flow tests only after an eligible Flow test exists in the org.",
+      "sf_flow does not deactivate Flows. After external temporary activation, never treat deploying a Draft version as deactivation; deploy FlowDefinition metadata with <activeVersionNumber>0</activeVersionNumber>, then verify FlowDefinitionView IsActive=false and ActiveVersionId=null (and no CronTrigger remains for a scheduled Flow).",
       "Read extensions/sf-flow/AGENT_GUIDE.md for core Flow families, lifecycle ordering, and proof boundaries.",
     ],
     parameters: Params,

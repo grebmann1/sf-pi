@@ -284,6 +284,18 @@ function buildModel(root: XmlNode, file: string, source: string): FlowModel {
         column: node.column,
       });
       connectors.push(...connectorsFor(node, name));
+      if (node.name === "screens") {
+        for (const field of node.children.filter((candidate) => candidate.name === "fields")) {
+          const fieldName = childText(field, "name");
+          if (!fieldName) continue;
+          resources.push({
+            name: fieldName,
+            kind: "screenField",
+            line: field.line,
+            column: field.column,
+          });
+        }
+      }
     } else if (RESOURCE_KINDS.has(node.name)) {
       const name = childText(node, "name");
       if (!name) continue;
@@ -508,6 +520,22 @@ function runFamilyChecks(
       start,
     );
   }
+  if (model.family === "screen") {
+    for (const screen of root.children.filter((node) => node.name === "screens")) {
+      if (
+        childText(screen, "allowBack") === "false" &&
+        childText(screen, "allowFinish") === "false"
+      ) {
+        report(
+          "core-flow-family",
+          "high",
+          "A Screen can disable allowBack or allowFinish, but not both.",
+          screen,
+          childText(screen, "name"),
+        );
+      }
+    }
+  }
   if (model.family !== "screen") {
     const screen = model.elements.find((element) => element.kind === "screens");
     if (screen) {
@@ -540,6 +568,17 @@ function runFamilyChecks(
       "core-flow-family",
       "high",
       "Platform event-triggered Flow requires an event object.",
+      start,
+    );
+  }
+  if (
+    model.family === "platform-event-triggered" &&
+    start?.children.some((node) => node.name === "filters")
+  ) {
+    report(
+      "core-flow-family",
+      "high",
+      "Platform event-triggered Flow does not support Start filters.",
       start,
     );
   }
@@ -613,7 +652,11 @@ function runReferenceChecks(
     ...model.elements.map((element) => element.name),
     ...model.resources.map((resource) => resource.name),
   ]);
-  const recordContext = model.family === "record-triggered";
+  const recordContext = [
+    "record-triggered",
+    "schedule-triggered",
+    "platform-event-triggered",
+  ].includes(model.family);
   const reported = new Set<string>();
   for (const reference of model.references) {
     const first = reference.value.split(".")[0];
@@ -636,7 +679,7 @@ function runReferenceChecks(
         reportReference(
           "record-context",
           "high",
-          `${first} is unavailable outside a record-triggered Flow.`,
+          `${first} is unavailable for the ${model.family} Flow context.`,
           reference,
           report,
         );

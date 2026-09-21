@@ -65,9 +65,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - pi-version: "0.86.0"
-            experimental: false
-          - pi-version: "0.86.1"
+          - pi-version: "0.87.0"
             experimental: false
           - pi-version: "latest"
             experimental: true

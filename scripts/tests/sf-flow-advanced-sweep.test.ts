@@ -57,7 +57,7 @@ describe("SF Flow advanced runtime sweep", () => {
   });
 
   it("tracks every broad-coverage Flow and targeted Apex test class", () => {
-    expect(FLOW_API_NAMES).toHaveLength(22);
+    expect(FLOW_API_NAMES).toHaveLength(33);
     expect(new Set(FLOW_API_NAMES).size).toBe(FLOW_API_NAMES.length);
     expect(FLOW_API_NAMES).toEqual(
       expect.arrayContaining([
@@ -70,10 +70,22 @@ describe("SF Flow advanced runtime sweep", () => {
         "SfPi_Advanced_Data_Operations",
         "SfPi_Advanced_Custom_Error",
         "SfPi_Advanced_Email_Action",
+        "SfPi_Advanced_Rollback",
+        "SfPi_Advanced_Forced_Faults",
+        "SfPi_Advanced_Related_Delete",
+        "SfPi_Advanced_Record_Variables",
+        "SfPi_Advanced_Multi_Sort",
+        "SfPi_Advanced_Create_Upsert",
+        "SfPi_Advanced_Upsert_Collection",
+        "SfPi_Advanced_Transform_Aggregate",
+        "SfPi_Advanced_Transform_Nested",
+        "SfPi_Advanced_Transform_Join",
+        "SfPi_Advanced_Wait_Resume",
       ]),
     );
-    expect(APEX_TEST_CLASSES).toHaveLength(17);
+    expect(APEX_TEST_CLASSES).toHaveLength(18);
     expect(new Set(APEX_TEST_CLASSES).size).toBe(APEX_TEST_CLASSES.length);
+    expect(APEX_TEST_CLASSES).toContain("SfPiFlowSliceOneRuntimeTest");
   });
 
   it("uses FlowDefinition activeVersionNumber zero for cleanup", () => {

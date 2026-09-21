@@ -42,6 +42,17 @@ export const FLOW_API_NAMES = [
   "SfPi_Advanced_Data_Operations",
   "SfPi_Advanced_Custom_Error",
   "SfPi_Advanced_Email_Action",
+  "SfPi_Advanced_Rollback",
+  "SfPi_Advanced_Forced_Faults",
+  "SfPi_Advanced_Related_Delete",
+  "SfPi_Advanced_Record_Variables",
+  "SfPi_Advanced_Multi_Sort",
+  "SfPi_Advanced_Create_Upsert",
+  "SfPi_Advanced_Upsert_Collection",
+  "SfPi_Advanced_Transform_Aggregate",
+  "SfPi_Advanced_Transform_Nested",
+  "SfPi_Advanced_Transform_Join",
+  "SfPi_Advanced_Wait_Resume",
 ] as const;
 const FLOW_FILES = FLOW_API_NAMES.map((name) =>
   path.join(FORCE_APP, `main/default/flows/${name}.flow-meta.xml`),
@@ -64,6 +75,7 @@ export const APEX_TEST_CLASSES = [
   "SfPiFlowDataElementRuntimeTest",
   "SfPiFlowCustomErrorRuntimeTest",
   "SfPiFlowStandardActionRuntimeTest",
+  "SfPiFlowSliceOneRuntimeTest",
 ] as const;
 
 interface AdvancedArgs {
@@ -149,6 +161,13 @@ async function deployComponents(
       : [];
     const rawTests = result.response.details?.runTestResult?.failures as unknown;
     const testFailures = rawTests ? (Array.isArray(rawTests) ? rawTests : [rawTests]) : [];
+    const rawCoverageWarnings = result.response.details?.runTestResult
+      ?.codeCoverageWarnings as unknown;
+    const coverageWarnings = rawCoverageWarnings
+      ? Array.isArray(rawCoverageWarnings)
+        ? rawCoverageWarnings
+        : [rawCoverageWarnings]
+      : [];
     const messages = [
       ...componentFailures
         .slice(0, 10)
@@ -158,6 +177,10 @@ async function deployComponents(
       ...testFailures.slice(0, 10).map((failure) => {
         const value = failure as { name?: unknown; methodName?: unknown; message?: unknown };
         return `${String(value.name ?? "test")}.${String(value.methodName ?? "unknown")}: ${String(value.message ?? "unknown test failure")}`;
+      }),
+      ...coverageWarnings.slice(0, 10).map((warning) => {
+        const value = warning as { name?: unknown; message?: unknown };
+        return `${String(value.name ?? "Apex coverage")}: ${String(value.message ?? "coverage requirement not met")}`;
       }),
     ];
     throw new Error(
@@ -254,7 +277,8 @@ async function resolveScheduleStart(session: SalesforceSession): Promise<Schedul
   });
   const timeZone = user.records[0]?.TimeZoneSidKey;
   if (!timeZone) throw new Error("Could not resolve the activating user's time zone.");
-  return { ...scheduleWallClock(new Date(Date.now() + 3 * 60_000), timeZone), timeZone };
+  // Active check-only and deployment each run the targeted Apex suite before the schedule can fire.
+  return { ...scheduleWallClock(new Date(Date.now() + 8 * 60_000), timeZone), timeZone };
 }
 
 interface ScheduleFixture {
@@ -265,6 +289,64 @@ interface ScheduleFixture {
 interface AsyncPathFixture {
   accountId?: string;
   contactId?: string;
+}
+
+interface WaitResumeFixture {
+  key: string;
+  interviewLabel: string;
+}
+
+interface PermissionSetAssignmentRecord {
+  Id?: string;
+}
+
+async function assignProbePermissionSet(session: SalesforceSession): Promise<string | undefined> {
+  const identity = await session.identity();
+  const permissionSets = await session.query<{ Id?: string }>({
+    soql: "SELECT Id FROM PermissionSet WHERE Name = 'SfPi_Flow_Probe_Access' LIMIT 1",
+    api: "rest",
+    maxRows: 1,
+  });
+  const permissionSetId = permissionSets.records[0]?.Id;
+  if (!permissionSetId) throw new Error("The probe fixture permission set was not deployed.");
+  const existing = await session.query<PermissionSetAssignmentRecord>({
+    soql: `SELECT Id FROM PermissionSetAssignment WHERE AssigneeId = '${identity.user_id}' AND PermissionSetId = '${permissionSetId}' LIMIT 1`,
+    api: "rest",
+    maxRows: 1,
+  });
+  if (existing.records[0]?.Id) {
+    console.log("✅ permission: existing probe fixture assignment");
+    return undefined;
+  }
+  const response = await session.request<{ id?: string; success?: boolean; errors?: unknown }>({
+    method: "POST",
+    path: "/sobjects/PermissionSetAssignment",
+    body: { AssigneeId: identity.user_id, PermissionSetId: permissionSetId },
+  });
+  if (response.status >= 400 || response.body.success !== true || !response.body.id) {
+    throw new Error(
+      `Could not assign probe fixture permission set: ${JSON.stringify(response.body.errors ?? response.body)}`,
+    );
+  }
+  console.log("✅ permission: assigned probe fixture access");
+  return response.body.id;
+}
+
+async function removeProbePermissionSetAssignment(
+  session: SalesforceSession,
+  assignmentId: string | undefined,
+): Promise<void> {
+  if (!assignmentId) return;
+  const response = await session.request({
+    method: "DELETE",
+    path: `/sobjects/PermissionSetAssignment/${assignmentId}`,
+  });
+  if (response.status >= 400 && response.status !== 404) {
+    throw new Error(
+      `Could not remove probe fixture permission assignment: status ${response.status}.`,
+    );
+  }
+  console.log("✅ permission cleanup: removed probe fixture assignment");
 }
 
 async function createRecord(
@@ -376,6 +458,80 @@ async function exerciseAsyncPath(
   throw new Error("Timed out waiting for asynchronous-after-commit Flow evidence.");
 }
 
+async function startWaitResume(
+  session: SalesforceSession,
+  fixture: WaitResumeFixture,
+  timeoutSeconds = 30,
+): Promise<void> {
+  const response = await session.request<
+    Array<{ isSuccess?: boolean; errors?: Array<{ message?: string }> }>
+  >({
+    method: "POST",
+    path: "/actions/custom/flow/SfPi_Advanced_Wait_Resume",
+    body: { inputs: [{ inputKey: fixture.key }] },
+  });
+  const result = response.body[0];
+  if (response.status >= 400 || result?.isSuccess !== true) {
+    throw new Error(
+      `Could not start Wait Flow: ${result?.errors?.map((error) => error.message).join(" | ") || response.status}`,
+    );
+  }
+
+  const deadline = Date.now() + timeoutSeconds * 1_000;
+  do {
+    const interviews = await session.query<{
+      Id?: string;
+      InterviewStatus?: string;
+      CurrentElement?: string;
+    }>({
+      soql: `SELECT Id, InterviewStatus, CurrentElement FROM FlowInterview WHERE InterviewLabel = '${fixture.interviewLabel}'`,
+      api: "rest",
+      maxRows: 2,
+    });
+    if (interviews.records.length === 1 && interviews.records[0]?.Id) {
+      console.log(
+        `✅ wait runtime: persisted interview · status=${interviews.records[0].InterviewStatus ?? "unknown"} · element=${interviews.records[0].CurrentElement ?? "unknown"}`,
+      );
+      return;
+    }
+    await delay(1_000);
+  } while (Date.now() < deadline);
+  throw new Error("Timed out waiting for the FlowInterview created by the Wait element.");
+}
+
+async function waitForWaitResume(
+  session: SalesforceSession,
+  fixture: WaitResumeFixture,
+  timeoutSeconds = 240,
+): Promise<void> {
+  const deadline = Date.now() + timeoutSeconds * 1_000;
+  do {
+    const probes = await session.query<{ Id?: string; Stage__c?: string }>({
+      soql: `SELECT Id, Stage__c FROM SfPi_Flow_Probe__c WHERE CorrelationKey__c = '${fixture.key}'`,
+      api: "rest",
+      maxRows: 5,
+    });
+    const fault = probes.records.find((record) => record.Stage__c === "wait-fault");
+    if (fault) throw new Error("The Wait element resumed through its fault connector.");
+    const resumed = probes.records.filter((record) => record.Stage__c === "resumed");
+    if (resumed.length === 1 && resumed[0]?.Id) {
+      const interviews = await session.query<{ Id?: string }>({
+        soql: `SELECT Id FROM FlowInterview WHERE InterviewLabel = '${fixture.interviewLabel}'`,
+        api: "rest",
+        maxRows: 2,
+      });
+      if (interviews.records.length === 0) {
+        console.log(
+          "✅ wait runtime: interview resumed · one evidence record · no paused interview",
+        );
+        return;
+      }
+    }
+    await delay(2_000);
+  } while (Date.now() < deadline);
+  throw new Error("Timed out waiting for the Wait interview to resume and finish.");
+}
+
 async function waitForScheduleEvidence(
   session: SalesforceSession,
   fixture: ScheduleFixture,
@@ -442,6 +598,30 @@ async function cleanupAsyncPathFixture(
   if (fixture.contactId) await deleteRecord(session, "Contact", fixture.contactId);
   if (fixture.accountId) await deleteRecord(session, "Account", fixture.accountId);
   console.log("✅ async cleanup: Task · Contact · Account");
+}
+
+async function cleanupWaitResumeFixture(
+  session: SalesforceSession,
+  fixture: WaitResumeFixture | undefined,
+): Promise<void> {
+  if (!fixture) return;
+  const probes = await session.query<{ Id?: string }>({
+    soql: `SELECT Id FROM SfPi_Flow_Probe__c WHERE CorrelationKey__c = '${fixture.key}'`,
+    api: "rest",
+    maxRows: 10,
+  });
+  for (const probe of probes.records) {
+    if (probe.Id) await deleteRecord(session, "SfPi_Flow_Probe__c", probe.Id);
+  }
+  const interviews = await session.query<{ Id?: string }>({
+    soql: `SELECT Id FROM FlowInterview WHERE InterviewLabel = '${fixture.interviewLabel}'`,
+    api: "rest",
+    maxRows: 10,
+  });
+  for (const interview of interviews.records) {
+    if (interview.Id) await deleteRecord(session, "FlowInterview", interview.Id);
+  }
+  console.log("✅ wait cleanup: evidence records · paused interviews");
 }
 
 async function cleanupScheduleFixture(
@@ -529,6 +709,16 @@ async function verifyInactiveAndClean(session: SalesforceSession): Promise<void>
     api: "rest",
     maxRows: 1,
   });
+  const probes = await session.query<{ Id?: string }>({
+    soql: "SELECT Id FROM SfPi_Flow_Probe__c LIMIT 1",
+    api: "rest",
+    maxRows: 1,
+  });
+  const interviews = await session.query<{ Id?: string }>({
+    soql: "SELECT Id FROM FlowInterview WHERE InterviewLabel LIKE 'SF Pi Wait SFPI-ADVANCED-WAIT-%' LIMIT 1",
+    api: "rest",
+    maxRows: 1,
+  });
   const cron = await session.query<{ Id?: string }>({
     soql: "SELECT Id FROM CronTrigger WHERE CronJobDetail.Name LIKE 'SfPi_Advanced_Scheduled_Pipeline%' LIMIT 5",
     api: "rest",
@@ -539,11 +729,17 @@ async function verifyInactiveAndClean(session: SalesforceSession): Promise<void>
     opportunities.records.length ||
     tasks.records.length ||
     contacts.records.length ||
+    probes.records.length ||
+    interviews.records.length ||
     cron.records.length
   ) {
-    throw new Error("Advanced Flow cleanup left records or a scheduled job behind.");
+    throw new Error(
+      "Advanced Flow cleanup left records, a paused interview, or a scheduled job behind.",
+    );
   }
-  console.log("✅ verify: all advanced Flows inactive · no records or scheduled job");
+  console.log(
+    "✅ verify: all advanced Flows inactive · no records, paused interviews, or scheduled job",
+  );
 }
 
 async function main(): Promise<void> {
@@ -574,7 +770,12 @@ async function main(): Promise<void> {
   await deployComponents(session, FORCE_APP, { checkOnly: false });
   if (!args.runtime) {
     await deactivateFixtures(session);
-    await verifyInactiveAndClean(session);
+    const assignmentId = await assignProbePermissionSet(session);
+    try {
+      await verifyInactiveAndClean(session);
+    } finally {
+      await removeProbePermissionSetAssignment(session, assignmentId);
+    }
     console.log("Advanced Flow Draft deployment passed.");
     return;
   }
@@ -585,24 +786,42 @@ async function main(): Promise<void> {
   );
   const scheduleFixture: ScheduleFixture = { accountIds: [], contactIds: [] };
   const asyncPathFixture: AsyncPathFixture = {};
+  const waitResumeFixture: WaitResumeFixture = {
+    key: `SFPI-ADVANCED-WAIT-${Date.now()}`,
+    interviewLabel: "",
+  };
+  waitResumeFixture.interviewLabel = `SF Pi Wait ${waitResumeFixture.key}`;
   let stagedRoot: string | undefined;
+  let probePermissionSetAssignmentId: string | undefined;
   try {
+    probePermissionSetAssignmentId = await assignProbePermissionSet(session);
     await populateScheduleFixture(session, scheduleFixture);
     stagedRoot = await stageRuntimeSource(scheduleStart);
+    await deployComponents(session, path.join(stagedRoot, "force-app"), {
+      checkOnly: true,
+      tests: APEX_TEST_CLASSES,
+    });
     await deployComponents(session, path.join(stagedRoot, "force-app"), {
       checkOnly: false,
       tests: APEX_TEST_CLASSES,
     });
+    await startWaitResume(session, waitResumeFixture);
     await exerciseAsyncPath(session, asyncPathFixture);
     await waitForScheduleEvidence(session, scheduleFixture);
+    await waitForWaitResume(session, waitResumeFixture);
   } finally {
     try {
       await deactivateFixtures(session);
       await cleanupAsyncPathFixture(session, asyncPathFixture);
+      await cleanupWaitResumeFixture(session, waitResumeFixture);
       await cleanupScheduleFixture(session, scheduleFixture);
       await verifyInactiveAndClean(session);
     } finally {
-      if (stagedRoot) await rm(stagedRoot, { recursive: true, force: true });
+      try {
+        await removeProbePermissionSetAssignment(session, probePermissionSetAssignmentId);
+      } finally {
+        if (stagedRoot) await rm(stagedRoot, { recursive: true, force: true });
+      }
     }
   }
   console.log("SF Flow advanced runtime sweep passed.");
